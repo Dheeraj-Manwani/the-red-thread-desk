@@ -61,7 +61,7 @@ function instagramApi(token: string, id: string): Api {
         throw error;
       }
     },
-    setIceBreakers: (actions) => instagram.setIceBreakers(token, actions),
+    setIceBreakers: (actions) => instagram.setIceBreakers(token, id, actions),
   };
 }
 

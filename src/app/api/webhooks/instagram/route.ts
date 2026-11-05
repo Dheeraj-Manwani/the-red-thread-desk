@@ -45,7 +45,7 @@ function collect(body: WebhookBody) {
 
 export async function POST(request: NextRequest) {
   const raw = await request.text();
-  if (!validSignature(raw, request.headers.get("x-hub-signature-256"), env().INSTAGRAM_APP_SECRET)) {
+  if (!validSignature(raw, request.headers.get("x-hub-signature-256"), env().META_APP_SECRET)) {
     return new Response("Invalid signature", { status: 401 });
   }
   let body: WebhookBody;

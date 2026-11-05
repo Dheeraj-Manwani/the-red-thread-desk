@@ -1,6 +1,5 @@
 import {
   graphCall,
-  GraphApiError,
   messageBody,
   carouselBody,
   type CarouselCard,
@@ -11,8 +10,13 @@ import {
   type SendResult,
 } from "@/lib/graph";
 
-/** Instagram API with Instagram Login. Docs: developers.facebook.com/docs/instagram-platform */
-const BASE = "https://graph.instagram.com";
+/**
+ * Instagram API on graph.facebook.com with a system-user token ("API setup with Unified login" in the
+ * Meta app dashboard). New Meta apps can't use Instagram Login any more, and graph.instagram.com rejects
+ * these tokens. Calls address the Instagram professional account by its ID; no Facebook Page is involved.
+ * Verified live (Nov 2026): GET /{ig-id}, /{ig-id}/media, /{ig-id}/conversations, /{ig-id}/subscribed_apps.
+ */
+const BASE = "https://graph.facebook.com";
 
 const call = <T>(token: string, method: GraphMethod, path: string, opts?: GraphOptions) =>
   graphCall<T>(BASE, token, method, path, opts);
@@ -29,9 +33,10 @@ export type InstagramMedia = {
 };
 
 export const instagram = {
-  me(token: string) {
-    return call<{ user_id: string; username: string; id: string }>(token, "GET", "me", {
-      query: { fields: "user_id,username" },
+  /** The account itself. A system-user token's /me is the system user, so the ID comes from INSTAGRAM_ACCOUNT_ID. */
+  account(token: string, igUserId: string) {
+    return call<{ id: string; username: string; name?: string }>(token, "GET", igUserId, {
+      query: { fields: "id,username,name" },
     });
   },
 
@@ -83,27 +88,14 @@ export const instagram = {
   },
 
   /** Up to 4 questions. Taps arrive as postbacks (messaging_postbacks field). */
-  setIceBreakers(token: string, actions: IceBreakerAction[]) {
+  setIceBreakers(token: string, igUserId: string, actions: IceBreakerAction[]) {
     if (actions.length === 0) {
-      return call<{ result?: string }>(token, "DELETE", "me/messenger_profile", {
+      return call<{ result?: string }>(token, "DELETE", `${igUserId}/messenger_profile`, {
         body: { platform: "instagram", fields: ["ice_breakers"] },
       });
     }
-    return call<{ result?: string }>(token, "POST", "me/messenger_profile", {
+    return call<{ result?: string }>(token, "POST", `${igUserId}/messenger_profile`, {
       body: { platform: "instagram", ice_breakers: [{ call_to_actions: actions, locale: "default" }] },
     });
-  },
-
-  /** Long-lived tokens last 60 days; refreshing returns a fresh 60-day token. */
-  async refreshToken(token: string) {
-    const url = new URL(`${BASE}/refresh_access_token`);
-    url.searchParams.set("grant_type", "ig_refresh_token");
-    url.searchParams.set("access_token", token);
-    const res = await fetch(url, { cache: "no-store" });
-    const json = (await res.json()) as { access_token?: string; expires_in?: number; error?: { message?: string } };
-    if (!res.ok || !json.access_token) {
-      throw new GraphApiError(json.error?.message ?? "Token refresh failed", res.status);
-    }
-    return { accessToken: json.access_token, expiresIn: json.expires_in ?? 60 * 24 * 3600 };
   },
 };

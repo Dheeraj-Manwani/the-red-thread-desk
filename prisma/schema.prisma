@@ -21,9 +21,8 @@ model Account {
   externalId     String
   /// Instagram handle, or the Facebook Page name.
   username       String?
+  /// None of these expire: Instagram and WhatsApp use system-user tokens, Facebook a Page token.
   accessToken    String
-  /// Instagram only. Page tokens made from a long-lived user token don't expire.
-  tokenExpiresAt DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 }
@@ -512,6 +511,8 @@ model Broadcast {
 
 enum RecipientStatus {
   PENDING
+  /// Claimed by one sender run; nobody else may send to it.
+  SENDING
   SENT
   DELIVERED
   READ

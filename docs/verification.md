@@ -3,11 +3,12 @@
 Everything below is **built but not verified against Meta**. Code compiles, lints and builds. Tick items off during live testing.
 
 Tags: [Certain] / [Likely] / [Guessing] = how sure we are the code matches Meta's real behaviour.
+Known problems and risks, including code races to fix: [known-issues.md](known-issues.md).
 
 ## Before any live test
 
 - [ ] Reset the local DB to the squashed `init` migration: `pnpm prisma migrate reset` (Prisma asks for your consent), then `pnpm db:migrate`.
-- [ ] Fill `.env`: `INSTAGRAM_APP_SECRET`, `INSTAGRAM_VERIFY_TOKEN`, `INSTAGRAM_ACCESS_TOKEN`, `FACEBOOK_APP_SECRET`, `FACEBOOK_PAGE_ACCESS_TOKEN`, `ADMIN_PASSWORD`.
+- [ ] Fill `.env`: `META_APP_SECRET`, `INSTAGRAM_VERIFY_TOKEN`, `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_ACCOUNT_ID`, `FACEBOOK_PAGE_ACCESS_TOKEN`, `ADMIN_PASSWORD`.
 - [ ] Add your second Instagram / Facebook account as a **tester** on the Meta app. In Development mode Meta only sends webhooks for people with a role on the app. [Certain, Meta docs]
 - [ ] `cloudflared tunnel --url http://localhost:3000`, put the URL in `APP_URL`, restart `pnpm dev`.
 
@@ -22,16 +23,16 @@ Tags: [Certain] / [Likely] / [Guessing] = how sure we are the code matches Meta'
 - [ ] Non-follower → follow prompt → follow → recheck → link.
 - [ ] Short link redirects and counts a click; the link-preview crawler is not counted.
 - [ ] STOP / START (exact message only).
-- [ ] Token refresh: `/settings` button, and cron with `CRON_SECRET`.
+- [ ] Instagram token: system-user token, no refresh needed. `/settings` shows the account (@theredthreadcards).
 
 ## Phase 2: Facebook, stats, story replies, ice breakers
 
 - [ ] Page webhook (object `page`) verifies at `/api/webhooks/facebook` and is signed with the Meta app secret. [Likely]
 - [ ] Page comment → private reply (Messenger) → tap → link. No follow gate.
 - [ ] Facebook public reply via `POST /{comment-id}/comments`.
-- [ ] Graph API accepts the `Authorization: Bearer` header on graph.facebook.com. [Likely]. If not, switch to the `access_token` query param in `src/lib/graph.ts`.
+- [x] Graph API accepts the `Authorization: Bearer` header on graph.facebook.com. [Certain: verified with the Instagram system-user token]
 - [ ] Instagram story reply arrives with `message.reply_to.story.id` and runs a story automation. [Likely]
-- [ ] Ice breakers publish (`me/messenger_profile`) on both channels; a tap arrives as a postback. Instagram needs the `messaging_postbacks` webhook field. [Likely]
+- [ ] Ice breakers publish (Instagram: `/{ig-id}/messenger_profile`, Facebook: `me/messenger_profile` with the Page token) on both channels; a tap arrives as a postback. Instagram needs the `messaging_postbacks` webhook field. [Likely]
 - [ ] `/stats` numbers match the comment log; follows gained counts only people who weren't following at the first check.
 
 ## Phase 3: Flow builder
@@ -76,7 +77,7 @@ Tags: [Certain] / [Likely] / [Guessing] = how sure we are the code matches Meta'
 ## Phase 6: WhatsApp, broadcasts, AI intent, dashboard
 
 - [ ] **Coexistence onboarding** of your current WhatsApp Business number (Meta's Embedded Signup flow; your phone app keeps working). Then `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_BUSINESS_ACCOUNT_ID`, a system-user `WHATSAPP_ACCESS_TOKEN`. [Likely]: confirm your own app can run Coexistence signup without a BSP.
-- [ ] Webhook `/api/webhooks/whatsapp` verifies; fields `messages`, `message_template_status_update`, `smb_message_echoes`; signed with the Meta app secret (`FACEBOOK_APP_SECRET`). [Likely]
+- [ ] Webhook `/api/webhooks/whatsapp` verifies; fields `messages`, `message_template_status_update`, `smb_message_echoes`; signed with the Meta app secret (`META_APP_SECRET`). [Likely]
 - [ ] Inbound text, button and list replies reach flows; ≤3 choices = reply buttons, 4–10 = list menu; designs = list with preview links.
 - [ ] Replies you type in the WhatsApp Business app arrive as `smb_message_echoes` and pause the bot. [Likely]
 - [ ] WhatsApp photos open through `/api/whatsapp/media/<id>` (needs your login).

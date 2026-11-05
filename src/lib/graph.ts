@@ -1,6 +1,6 @@
 import { env } from "@/lib/env";
 
-/** Shared fetch wrapper for graph.instagram.com and graph.facebook.com. */
+/** Shared fetch wrapper for graph.facebook.com (Instagram, Facebook and WhatsApp all use it). */
 export class GraphApiError extends Error {
   constructor(
     message: string,

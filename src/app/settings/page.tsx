@@ -1,13 +1,12 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
-import { refreshToken, reloadToken, subscribeWebhooks } from "@/app/actions";
+import { reloadToken, subscribeWebhooks } from "@/app/actions";
 import { Card, Loading, PageTitle, secondaryButtonClass } from "@/components/ui";
 import type { Channel } from "@/generated/prisma/client";
 import { getAccount } from "@/lib/account";
 import { channelLabel } from "@/lib/channels";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
-import { formatDateTime } from "@/lib/format";
 import { pushStatus } from "@/lib/push";
 import { razorpayConfigured } from "@/lib/razorpay";
 import { aiConfigured, aiSpendThisMonth } from "@/lib/ai";
@@ -18,7 +17,7 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 const webhookSetup = {
   INSTAGRAM: {
     path: "/api/webhooks/instagram",
-    where: "Instagram > API setup with Instagram login > Webhooks",
+    where: "Use cases > Instagram API > API setup with Unified login > Configure webhooks",
     token: "INSTAGRAM_VERIFY_TOKEN",
     fields: "comments, messages, messaging_postbacks",
   },
@@ -55,21 +54,13 @@ async function AccountCard({ channel, appUrl }: { channel: Channel; appUrl: stri
             {channel === "INSTAGRAM" ? `@${account.username}` : account.username} · ID {account.externalId}
           </p>
           {channel === "INSTAGRAM" && (
-            <p className="text-sm text-neutral-600">
-              Token expires: {formatDateTime(account.tokenExpiresAt)}
-              {!account.tokenExpiresAt && " (unknown until the first refresh)"}
-            </p>
+            <p className="text-sm text-neutral-600">System-user token: it doesn&apos;t expire.</p>
           )}
           <div className="flex flex-wrap gap-2">
             <form action={subscribeWebhooks}>
               <input type="hidden" name="channel" value={channel} />
               <button className={secondaryButtonClass}>Subscribe to webhooks</button>
             </form>
-            {channel === "INSTAGRAM" && (
-              <form action={refreshToken}>
-                <button className={secondaryButtonClass}>Refresh token now</button>
-              </form>
-            )}
             <form action={reloadToken}>
               <input type="hidden" name="channel" value={channel} />
               <button className={secondaryButtonClass}>Use token from .env</button>
@@ -168,7 +159,6 @@ async function NotificationsCard() {
 const notices: Record<string, (v: string) => string> = {
   subscribed: (v) => `${channelLabel[v as Channel] ?? v} subscribed to webhooks.`,
   reloaded: (v) => `${channelLabel[v as Channel] ?? v} token reloaded from .env.`,
-  refreshed: () => "Instagram access token refreshed.",
 };
 
 async function Accounts({ searchParams }: { searchParams: SearchParams }) {

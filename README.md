@@ -11,7 +11,8 @@ Comment-to-DM automation for Red Thread on Instagram and Facebook.
 - **Phase 6:** WhatsApp Cloud API (Coexistence) in the inbox and flows, DM keyword automations on every channel,
   templates and broadcasts with a cost preview, AI intent for Hinglish with a monthly cap, full dashboard and funnel.
 
-> **None of this has been verified against Meta yet.** See [docs/verification.md](docs/verification.md).
+> **None of this has been verified against Meta yet.** See [docs/verification.md](docs/verification.md) for the test
+> checklist and [docs/known-issues.md](docs/known-issues.md) for known problems and risks.
 
 ## Local setup
 
@@ -38,21 +39,33 @@ The URL changes on every restart: update `APP_URL` and both callback URLs in Met
 In Development mode Meta only sends webhooks for people with a role on the app, so add your test accounts as testers.
 Real customers need App Review (Advanced Access) and business verification. See `docs/verification.md`.
 
-### Instagram (Instagram API with Instagram login)
+### Instagram (API setup with Unified login)
 
-1. Webhooks: callback `https://<tunnel>/api/webhooks/instagram`, verify token = `INSTAGRAM_VERIFY_TOKEN`,
-   fields `comments`, `messages`, `messaging_postbacks`.
-2. Generate a token for the Red Thread account and put it in `INSTAGRAM_ACCESS_TOKEN`. `INSTAGRAM_APP_SECRET` is the
-   Instagram app secret shown on the same page.
-3. In `/settings`, click "Subscribe to webhooks" on the Instagram card.
+New Meta apps can't use "API setup with Instagram login" any more. This app uses a **system-user token** on
+`graph.facebook.com` and addresses the Instagram account by its ID. No Facebook Page is needed.
+
+1. Use cases > Instagram API > API setup with Unified login: connect the Red Thread business portfolio.
+2. Business Suite > Settings > Accounts > Instagram accounts: make sure the account is listed and copy its ID
+   (starts with `1784…`) into `INSTAGRAM_ACCOUNT_ID`. Sign in to Business Suite with Facebook, not Instagram; an
+   Instagram login can't open Settings.
+3. Business Suite > Settings > Users > System users: give the system user full control of the app and the Instagram
+   account, then Generate token (never expires) with `instagram_basic`, `instagram_manage_messages`,
+   `instagram_manage_comments`. Put it in `INSTAGRAM_ACCESS_TOKEN`.
+4. `META_APP_SECRET` = App settings > Basic > App secret. One secret signs Instagram, Facebook and WhatsApp webhooks.
+5. Webhooks (same Unified login page, "Configure webhooks"): callback `https://<tunnel>/api/webhooks/instagram`,
+   verify token = `INSTAGRAM_VERIFY_TOKEN`, fields `comments`, `messages`, `messaging_postbacks`.
+6. In `/settings`, click "Subscribe to webhooks" on the Instagram card.
 
 ### Facebook Page and Messenger
 
-1. Add the Messenger product to the same Meta app.
+1. Add the Messenger product to the same Meta app. Red Thread's system-user token currently sees no Facebook Page
+   (`GET /me/accounts` is empty), so connect or create the Page in the business portfolio first.
 2. Get a Page token: in Graph API Explorer, get a user token with `pages_show_list`, `pages_manage_metadata`,
    `pages_messaging`, `pages_read_engagement`, `pages_manage_engagement` and `pages_read_user_content`. Exchange it for a
    long-lived token, then `GET /me/accounts` and copy the Page's `access_token` into `FACEBOOK_PAGE_ACCESS_TOKEN`.
-3. `FACEBOOK_APP_SECRET` = App settings > Basic > App secret.
+   Untested alternative: assign the Page to the same system user and read `GET /{page-id}?fields=access_token` with
+   its token, so one system user covers every channel.
+3. Webhooks are signed with `META_APP_SECRET` (same app).
 4. Webhooks > Page: callback `https://<tunnel>/api/webhooks/facebook`, verify token = `FACEBOOK_VERIFY_TOKEN` (or the
    Instagram one), fields `feed`, `messages`, `messaging_postbacks`.
 5. In `/settings`, click "Subscribe to webhooks" on the Facebook card.

@@ -2,7 +2,7 @@ import type { RecipientStatus } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import type { WaStatus, WaTemplateUpdate } from "@/lib/engine/types";
 
-const RANK: Record<RecipientStatus, number> = { PENDING: 0, SENT: 1, DELIVERED: 2, READ: 3, FAILED: 4 };
+const RANK: Record<RecipientStatus, number> = { PENDING: 0, SENDING: 0, SENT: 1, DELIVERED: 2, READ: 3, FAILED: 4 };
 const FROM_META: Record<string, RecipientStatus> = { sent: "SENT", delivered: "DELIVERED", read: "READ", failed: "FAILED" };
 
 /** Delivery receipts. Only broadcast recipients are tracked; statuses arrive out of order, so never step back. */

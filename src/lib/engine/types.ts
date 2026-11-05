@@ -1,7 +1,7 @@
 import type { Channel } from "@/generated/prisma/client";
 import type { RazorpayWebhook } from "@/lib/razorpay";
 
-/** Instagram `comments` webhook value (Instagram API with Instagram Login). */
+/** Instagram `comments` webhook value (object "instagram"). */
 export type IgCommentValue = {
   id: string;
   text?: string;

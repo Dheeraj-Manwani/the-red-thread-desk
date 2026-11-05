@@ -8,11 +8,13 @@ const optional = z
 const schema = z.object({
   DATABASE_URL: z.string().min(1),
   APP_URL: z.string().url().default("http://localhost:3000"),
-  INSTAGRAM_APP_SECRET: z.string().min(1),
+  /** Meta app secret (App settings > Basic > App secret). Signs Instagram, Facebook and WhatsApp webhooks. */
+  META_APP_SECRET: z.string().min(1),
   INSTAGRAM_VERIFY_TOKEN: z.string().min(1),
+  /** System-user token from "API setup with Unified login". Doesn't expire. */
   INSTAGRAM_ACCESS_TOKEN: optional,
-  /** Meta app secret (App settings > Basic). Signs Page and Messenger webhooks. */
-  FACEBOOK_APP_SECRET: optional,
+  /** Instagram professional account ID (Business Suite > Settings > Instagram accounts), e.g. 1784... */
+  INSTAGRAM_ACCOUNT_ID: optional,
   /** Defaults to INSTAGRAM_VERIFY_TOKEN. */
   FACEBOOK_VERIFY_TOKEN: optional,
   /** Page token made from a long-lived user token (does not expire). */
@@ -24,7 +26,7 @@ const schema = z.object({
   WHATSAPP_BUSINESS_ACCOUNT_ID: optional,
   /** System user token with whatsapp_business_messaging + whatsapp_business_management. */
   WHATSAPP_ACCESS_TOKEN: optional,
-  /** Defaults to INSTAGRAM_VERIFY_TOKEN. Webhooks are signed with FACEBOOK_APP_SECRET (same Meta app). */
+  /** Defaults to INSTAGRAM_VERIFY_TOKEN. Webhooks are signed with META_APP_SECRET (same Meta app). */
   WHATSAPP_VERIFY_TOKEN: optional,
   /** ₹ per template message before GST, for cost previews. Check Meta's rate card for India. */
   WA_RATE_MARKETING_INR: z.coerce.number().default(0.86),

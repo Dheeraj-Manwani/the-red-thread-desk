@@ -8,10 +8,12 @@ import { whatsapp } from "@/lib/whatsapp";
 /** Looks up the account behind a token from .env. */
 async function fromEnv(channel: Channel) {
   if (channel === "INSTAGRAM") {
-    const token = env().INSTAGRAM_ACCESS_TOKEN;
-    if (!token) throw new Error("No Instagram account connected. Set INSTAGRAM_ACCESS_TOKEN.");
-    const me = await instagram.me(token);
-    return { externalId: me.user_id, username: me.username, accessToken: token };
+    const { INSTAGRAM_ACCESS_TOKEN: token, INSTAGRAM_ACCOUNT_ID: igUserId } = env();
+    if (!token || !igUserId) {
+      throw new Error("No Instagram account connected. Set INSTAGRAM_ACCOUNT_ID and INSTAGRAM_ACCESS_TOKEN.");
+    }
+    const ig = await instagram.account(token, igUserId);
+    return { externalId: ig.id, username: ig.username, accessToken: token };
   }
   if (channel === "WHATSAPP") {
     const { WHATSAPP_ACCESS_TOKEN: token, WHATSAPP_PHONE_NUMBER_ID: phoneId } = env();
@@ -50,15 +52,6 @@ export async function reloadAccountFromEnv(channel: Channel) {
   return db.account.upsert({
     where: { channel },
     create: { channel, ...data },
-    update: { ...data, tokenExpiresAt: null },
-  });
-}
-
-export async function refreshInstagramToken() {
-  const account = await getAccount("INSTAGRAM");
-  const { accessToken, expiresIn } = await instagram.refreshToken(account.accessToken);
-  return db.account.update({
-    where: { id: account.id },
-    data: { accessToken, tokenExpiresAt: new Date(Date.now() + expiresIn * 1000) },
+    update: data,
   });
 }

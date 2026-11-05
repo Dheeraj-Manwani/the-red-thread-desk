@@ -130,14 +130,59 @@ export async function submitTemplate(t: {
   });
 }
 
+/**
+ * Builds the recipient list, then flips SCHEDULED → SENDING. Recipients are written first, so no sender
+ * ever sees a SENDING broadcast with a half-built list; the conditional update means only one run starts it.
+ */
 async function start(broadcastId: string) {
   const b = await db.broadcast.findUniqueOrThrow({ where: { id: broadcastId } });
+  if (b.status !== "SCHEDULED") return;
   const contacts = await db.contact.findMany({ where: audienceWhere(b.tag), select: { id: true } });
   await db.broadcastRecipient.createMany({
     data: contacts.map((c) => ({ broadcastId, contactId: c.id })),
     skipDuplicates: true,
   });
-  await db.broadcast.update({ where: { id: broadcastId }, data: { status: "SENDING", startedAt: new Date() } });
+  await db.broadcast.updateMany({
+    where: { id: broadcastId, status: "SCHEDULED" },
+    data: { status: "SENDING", startedAt: new Date() },
+  });
+}
+
+/** A claim older than this means its run died mid-send. */
+const STALE_CLAIM_MS = 10 * 60_000;
+
+/**
+ * Atomically takes up to `limit` PENDING recipients for this run by marking them SENDING.
+ * SKIP LOCKED makes a second, overlapping run take different rows (or none), never the same ones.
+ */
+function claim(broadcastId: string, limit: number) {
+  return db.$queryRaw<{ id: string }[]>`
+    UPDATE "BroadcastRecipient"
+    SET status = 'SENDING'::"RecipientStatus", "updatedAt" = now()
+    WHERE id IN (
+      SELECT id FROM "BroadcastRecipient"
+      WHERE "broadcastId" = ${broadcastId} AND status = 'PENDING'::"RecipientStatus"
+      ORDER BY id
+      LIMIT ${limit}
+      FOR UPDATE SKIP LOCKED
+    )
+    RETURNING id`;
+}
+
+/**
+ * Claims whose run died (crash, timeout) are failed, not retried: the template may already have been
+ * delivered before the run died, and sending it again would charge and annoy twice.
+ */
+function failStaleClaims(broadcastId: string) {
+  return db.broadcastRecipient.updateMany({
+    where: {
+      broadcastId,
+      status: "SENDING",
+      waMessageId: null,
+      updatedAt: { lt: new Date(Date.now() - STALE_CLAIM_MS) },
+    },
+    data: { status: "FAILED", error: "send interrupted; not retried to avoid a duplicate" },
+  });
 }
 
 async function sendOne(
@@ -181,8 +226,8 @@ async function sendOne(
 
 /**
  * Starts due broadcasts and sends pending recipients until the time budget runs out.
- * Runs from the every-minute cron and right after "Send now"; safe to run twice at once
- * (a recipient that already has a message ID is never re-sent).
+ * Runs from the every-minute cron and right after "Send now". Overlapping runs are safe:
+ * each recipient is claimed by exactly one run before anything is sent to it.
  */
 export async function processBroadcasts(budgetMs = 45_000) {
   const until = Date.now() + budgetMs;
@@ -195,14 +240,22 @@ export async function processBroadcasts(budgetMs = 45_000) {
   let sent = 0;
   for (const b of sending) {
     const sources = (b.variables ?? []) as VariableSource[];
+    await failStaleClaims(b.id);
     while (Date.now() < until) {
-      const batch = await db.broadcastRecipient.findMany({
-        where: { broadcastId: b.id, status: "PENDING", waMessageId: null },
-        take: BATCH,
-        select: { id: true },
-      });
+      // Stopped from the page while we were sending: leave the rest PENDING.
+      const current = await db.broadcast.findUnique({ where: { id: b.id }, select: { status: true } });
+      if (current?.status !== "SENDING") break;
+
+      const batch = await claim(b.id, BATCH);
       if (batch.length === 0) {
-        await db.broadcast.update({ where: { id: b.id }, data: { status: "DONE", finishedAt: new Date() } });
+        // Done only when no other run still has claims in flight.
+        const inFlight = await db.broadcastRecipient.count({ where: { broadcastId: b.id, status: "SENDING" } });
+        if (inFlight === 0) {
+          await db.broadcast.updateMany({
+            where: { id: b.id, status: "SENDING" },
+            data: { status: "DONE", finishedAt: new Date() },
+          });
+        }
         break;
       }
       for (let i = 0; i < batch.length; i += PARALLEL) {

@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import type { Channel } from "@/generated/prisma/client";
-import { getAccount, refreshInstagramToken, reloadAccountFromEnv } from "@/lib/account";
+import { getAccount, reloadAccountFromEnv } from "@/lib/account";
 import { requireAdmin } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { facebook } from "@/lib/facebook";
@@ -160,12 +160,6 @@ export async function reloadToken(form: FormData) {
   const channel = channelFrom(form);
   await reloadAccountFromEnv(channel);
   redirect(`/settings?reloaded=${channel}`);
-}
-
-export async function refreshToken() {
-  await requireAdmin();
-  await refreshInstagramToken();
-  redirect("/settings?refreshed=1");
 }
 
 const iceBreakerSchema = z.object({
