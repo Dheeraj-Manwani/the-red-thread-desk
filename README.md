@@ -1,36 +1,39 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Red Thread Autoreply
 
-## Getting Started
+Comment-to-DM automation for Red Thread (Instagram first). Phase 1: per-post comment automations,
+follow gate, tracked links, comment log.
 
-First, run the development server:
+## Local setup
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
+```powershell
+pnpm remove cn @prisma/adapter-neon @neondatabase/serverless
+pnpm add @prisma/adapter-pg pg dotenv
+pnpm add -D prisma @types/pg
+copy .env.example .env          # then fill in the values
+pnpm db:up                      # Postgres in Docker on localhost:5432
+pnpm db:migrate --name init     # creates the tables
+pnpm prisma generate            # Prisma 7 no longer generates on migrate
+pnpm typecheck
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Meta needs a public HTTPS URL for webhooks. Run a tunnel and put its URL in `APP_URL`:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```powershell
+cloudflared tunnel --url http://localhost:3000
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Then in the Meta app dashboard (developers.facebook.com > your app > Instagram > API setup with Instagram login):
 
-## Learn More
+1. Webhooks: callback `https://<tunnel>/api/webhooks/instagram`, verify token = `INSTAGRAM_VERIFY_TOKEN`, subscribe to `comments` and `messages`.
+2. Generate a token for the Red Thread account and put it in `INSTAGRAM_ACCESS_TOKEN`.
+3. Open `/settings` in the app and click "Subscribe this account to webhooks".
+4. Create an automation in `/triggers`, then comment on that post from another account.
 
-To learn more about Next.js, take a look at the following resources:
+## How it works
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+`/api/webhooks/instagram` verifies the signature, saves each event, answers 200, then processes it with `after()`.
+Comment → trigger match (post-specific, then all-posts, then default) → private DM with a quick reply →
+tap → follow check (`is_user_follow_business`) → tracked link `/l/<code>` → redirect.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Production: Vercel Pro + Neon. Use Neon's pooled connection string as `DATABASE_URL`; run `pnpm db:deploy` on release.

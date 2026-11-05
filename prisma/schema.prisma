@@ -1,0 +1,157 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// The Red Thread Instagram professional account. One row in phase 1.
+model InstagramAccount {
+  id             String    @id @default(cuid())
+  igUserId       String    @unique
+  username       String?
+  accessToken    String
+  tokenExpiresAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model Contact {
+  id         String        @id @default(cuid())
+  /// Instagram-scoped ID seen on comments.
+  igsid      String        @unique
+  /// Instagram-scoped ID seen on DMs, if it ever differs from igsid.
+  dmIgsid    String?       @unique
+  username   String?
+  name       String?
+  isFollower Boolean?
+  optedOut   Boolean       @default(false)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  comments   Comment[]
+  sessions   LinkSession[]
+  links      ShortLink[]
+}
+
+enum TriggerScope {
+  /// Only the chosen posts or reels.
+  POSTS
+  /// Every post, checked after post-specific triggers.
+  ALL_POSTS
+  /// Fallback when nothing else matched.
+  DEFAULT
+}
+
+model CommentTrigger {
+  id               String        @id @default(cuid())
+  name             String
+  active           Boolean       @default(true)
+  scope            TriggerScope  @default(POSTS)
+  mediaIds         String[]
+  /// Empty = any comment. A trailing * matches prefixes (kitn* = kitna, kitne).
+  keywords         String[]
+  excludeWords     String[]
+  /// One is picked at random. {username} is replaced.
+  publicReplies    String[]
+  dmText           String
+  dmButtonText     String        @default("Send me the link")
+  followGate       Boolean       @default(true)
+  followPromptText String        @default("Follow us first, then tap the button below and the link is yours.")
+  followButtonText String        @default("I've followed")
+  linkUrl          String
+  linkMessage      String        @default("Here's your link:")
+  oncePerPerson    Boolean       @default(true)
+  priority         Int           @default(0)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  comments         Comment[]
+  sessions         LinkSession[]
+  links            ShortLink[]
+}
+
+enum EventStatus {
+  RECEIVED
+  PROCESSED
+  IGNORED
+  FAILED
+}
+
+model WebhookEvent {
+  id          String      @id @default(cuid())
+  source      String
+  kind        String
+  dedupeKey   String      @unique
+  payload     Json
+  status      EventStatus @default(RECEIVED)
+  error       String?
+  receivedAt  DateTime    @default(now())
+  processedAt DateTime?
+
+  @@index([status, receivedAt])
+}
+
+model Comment {
+  id            String          @id @default(cuid())
+  commentId     String          @unique
+  mediaId       String
+  text          String
+  fromIgsid     String
+  fromUsername  String?
+  contactId     String?
+  contact       Contact?        @relation(fields: [contactId], references: [id])
+  triggerId     String?
+  trigger       CommentTrigger? @relation(fields: [triggerId], references: [id], onDelete: SetNull)
+  matched       Boolean         @default(false)
+  skipReason    String?
+  error         String?
+  publicReplyId String?
+  dmSentAt      DateTime?
+  createdAt     DateTime        @default(now())
+  session       LinkSession?
+
+  @@index([mediaId, fromIgsid, triggerId])
+  @@index([createdAt])
+}
+
+enum SessionStatus {
+  AWAITING_TAP
+  AWAITING_FOLLOW
+  LINK_SENT
+}
+
+/// One comment-to-link journey for one person.
+model LinkSession {
+  id           String         @id @default(cuid())
+  contactId    String
+  contact      Contact        @relation(fields: [contactId], references: [id])
+  triggerId    String
+  trigger      CommentTrigger @relation(fields: [triggerId], references: [id], onDelete: Cascade)
+  commentId    String         @unique
+  comment      Comment        @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  status       SessionStatus  @default(AWAITING_TAP)
+  followChecks Int            @default(0)
+  linkSentAt   DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  shortLink    ShortLink?
+
+  @@index([contactId, status])
+}
+
+model ShortLink {
+  id             String          @id @default(cuid())
+  code           String          @unique
+  url            String
+  contactId      String?
+  contact        Contact?        @relation(fields: [contactId], references: [id])
+  triggerId      String?
+  trigger        CommentTrigger? @relation(fields: [triggerId], references: [id], onDelete: SetNull)
+  sessionId      String?         @unique
+  session        LinkSession?    @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  clicks         Int             @default(0)
+  firstClickedAt DateTime?
+  lastClickedAt  DateTime?
+  createdAt      DateTime        @default(now())
+}
