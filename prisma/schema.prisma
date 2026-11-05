@@ -10,9 +10,10 @@ datasource db {
 enum Channel {
   INSTAGRAM
   FACEBOOK
+  WHATSAPP
 }
 
-/// The connected Instagram professional account or Facebook Page. At most one per channel.
+/// The connected Instagram account, Facebook Page or WhatsApp number (phone number ID). At most one per channel.
 model Account {
   id             String    @id @default(cuid())
   channel        Channel   @unique
@@ -34,23 +35,41 @@ model Contact {
   externalId String
   /// ID seen on DMs (IGSID / PSID) when it differs. Learnt from the private reply response.
   dmId       String?
-  /// Instagram handle, or the Facebook display name.
+  /// Instagram handle, or the Facebook / WhatsApp display name.
   username   String?
   name       String?
+  /// Digits with country code (919876543210). WhatsApp contacts always have it; others once they share it.
+  /// Contacts on different channels with the same phone are the same person.
+  phone      String?
+  /// Agreed to WhatsApp marketing messages (broadcasts). Cleared by STOP.
+  marketingOptInAt DateTime?
   isFollower Boolean?
   optedOut   Boolean       @default(false)
   /// Answers to flow questions, by field name.
-  fields     Json          @default("{}")
-  createdAt  DateTime      @default(now())
-  updatedAt  DateTime      @updatedAt
-  comments   Comment[]
-  sessions   LinkSession[]
-  links      ShortLink[]
-  tags       ContactTag[]
-  flowRuns   FlowRun[]
+  fields         Json          @default("{}")
+  /// Last DM from the person. Meta only allows replies within 24 h of it.
+  lastInboundAt  DateTime?
+  lastMessageAt  DateTime?
+  lastReadAt     DateTime?
+  /// Bot stays quiet until then: you're talking to them yourself.
+  handoffUntil   DateTime?
+  /// Set when they asked for a person; cleared when you reply or hand back.
+  handoffAskedAt DateTime?
+  lastNotifiedAt DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  comments       Comment[]
+  sessions       LinkSession[]
+  links          ShortLink[]
+  tags           ContactTag[]
+  flowRuns       FlowRun[]
+  messages       Message[]
+  orders         Order[]
 
   @@unique([channel, externalId])
   @@unique([channel, dmId])
+  @@index([lastMessageAt])
+  @@index([phone])
 }
 
 enum TriggerKind {
@@ -58,6 +77,8 @@ enum TriggerKind {
   COMMENT
   /// Replies to Instagram stories.
   STORY_REPLY
+  /// A DM that matches keywords (or an AI intent). Every channel, including WhatsApp.
+  DM_KEYWORD
 }
 
 enum TriggerScope {
@@ -78,6 +99,8 @@ model Trigger {
   kind             TriggerKind   @default(COMMENT)
   scope            TriggerScope  @default(POSTS)
   mediaIds         String[]
+  /// DM keyword automations: AI intents that also start it when no keyword matched.
+  intents          String[]
   /// Empty = any text. A trailing * matches prefixes (kitn* = kitna, kitne).
   keywords         String[]
   excludeWords     String[]
@@ -247,6 +270,8 @@ enum FlowRunStatus {
   WAITING_FOLLOW
   /// Sent the private reply; can't message again until the person replies.
   WAITING_REPLY
+  /// Sent a payment link; continues on the Razorpay paid / expired webhook.
+  WAITING_PAYMENT
   DONE
   FAILED
 }
@@ -275,6 +300,7 @@ model FlowRun {
   updatedAt    DateTime      @updatedAt
   finishedAt   DateTime?
   links        ShortLink[]
+  orders       Order[]
 
   @@index([contactId, status, updatedAt])
 }
@@ -306,4 +332,218 @@ model Package {
   position  Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  orders    Order[]
+}
+
+enum MessageDirection {
+  IN
+  OUT
+}
+
+enum MessageSource {
+  /// The person.
+  CONTACT
+  /// Automations and flows.
+  BOT
+  /// You, from the inbox here.
+  ADMIN
+  /// You, typing in the Instagram or Messenger app (seen as an echo).
+  APP
+}
+
+/// Every DM in and out, for the inbox.
+model Message {
+  id        String           @id @default(cuid())
+  channel   Channel
+  contactId String
+  contact   Contact          @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  direction MessageDirection
+  source    MessageSource
+  text      String
+  /// Button titles sent with an outgoing message, or the tapped payload's title.
+  buttons   String[]
+  mid       String?
+  createdAt DateTime         @default(now())
+
+  @@unique([channel, mid])
+  @@index([contactId, createdAt])
+}
+
+/// A browser or installed PWA that gets push notifications.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+}
+
+/// A design from the Red Thread site. Synced; `showInCarousel` is ours.
+model CatalogueItem {
+  id             String    @id @default(cuid())
+  /// The site's ID (or slug) for the design.
+  externalId     String    @unique
+  name           String
+  occasion       String?
+  imageUrl       String?
+  previewUrl     String?
+  priceInr       Int?
+  /// As the site reports it. Missing from the last sync = false.
+  active         Boolean   @default(true)
+  showInCarousel Boolean   @default(true)
+  position       Int       @default(0)
+  raw            Json?
+  syncedAt       DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  orders         Order[]
+
+  @@index([active, showInCarousel, occasion])
+}
+
+enum OrderStage {
+  /// Interested, no link yet.
+  LEAD
+  PAYMENT_SENT
+  PAID
+  /// Collecting names, dates, venue, photos.
+  DETAILS
+  IN_PROGRESS
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+  EXPIRED
+  CANCELLED
+}
+
+model Order {
+  id                String         @id @default(cuid())
+  /// Shown as RT-<1000 + number>.
+  number            Int            @unique @default(autoincrement())
+  channel           Channel
+  contactId         String
+  contact           Contact        @relation(fields: [contactId], references: [id])
+  /// Design or package name, as sold.
+  title             String
+  amountInr         Int
+  packageId         String?
+  package           Package?       @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  designId          String?
+  design            CatalogueItem? @relation(fields: [designId], references: [id], onDelete: SetNull)
+  flowRunId         String?
+  flowRun           FlowRun?       @relation(fields: [flowRunId], references: [id], onDelete: SetNull)
+  stage             OrderStage     @default(PAYMENT_SENT)
+  paymentStatus     PaymentStatus  @default(UNPAID)
+  razorpayLinkId    String?        @unique
+  razorpayLinkUrl   String?
+  razorpayPaymentId String?
+  paidAt            DateTime?
+  /// Intake answers: couple_names, venue, maps_link, photos...
+  details           Json           @default("{}")
+  eventDate         DateTime?
+  notes             String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@index([stage, updatedAt])
+  @@index([contactId])
+}
+
+enum TemplateCategory {
+  MARKETING
+  UTILITY
+  AUTHENTICATION
+}
+
+/// A WhatsApp message template (needs Meta approval). Mirrors the WABA's templates.
+model WaTemplate {
+  id         String           @id @default(cuid())
+  name       String
+  language   String
+  category   TemplateCategory
+  /// APPROVED, PENDING, REJECTED, PAUSED, DISABLED (as Meta reports it).
+  status     String
+  /// Meta's components array (HEADER, BODY, FOOTER, BUTTONS).
+  components Json
+  metaId     String?
+  reason     String?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+  broadcasts Broadcast[]
+
+  @@unique([name, language])
+}
+
+enum BroadcastStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  DONE
+  CANCELLED
+}
+
+/// A template sent to opted-in WhatsApp contacts (optionally one tag).
+model Broadcast {
+  id               String              @id @default(cuid())
+  name             String
+  templateId       String
+  template         WaTemplate          @relation(fields: [templateId], references: [id])
+  /// Only contacts with this tag; null = every opted-in WhatsApp contact.
+  tag              String?
+  /// One source per {{n}} in the body: {"kind":"name"} | {"kind":"field","field":"city"} | {"kind":"text","value":"…"}.
+  variables        Json                @default("[]")
+  status           BroadcastStatus     @default(DRAFT)
+  scheduledAt      DateTime?
+  /// ₹, with 18% GST, at the rate when it was planned.
+  estimatedCostInr Float?
+  startedAt        DateTime?
+  finishedAt       DateTime?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  recipients       BroadcastRecipient[]
+
+  @@index([status, scheduledAt])
+}
+
+enum RecipientStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+model BroadcastRecipient {
+  id          String          @id @default(cuid())
+  broadcastId String
+  broadcast   Broadcast       @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  contactId   String
+  status      RecipientStatus @default(PENDING)
+  waMessageId String?         @unique
+  error       String?
+  sentAt      DateTime?
+  updatedAt   DateTime        @updatedAt
+
+  @@unique([broadcastId, contactId])
+  @@index([broadcastId, status])
+}
+
+/// One AI call, for the monthly spend cap.
+model AiUsage {
+  id           String   @id @default(cuid())
+  /// YYYY-MM, India time.
+  month        String
+  purpose      String
+  model        String
+  inputTokens  Int
+  outputTokens Int
+  costUsd      Float
+  createdAt    DateTime @default(now())
+
+  @@index([month])
 }

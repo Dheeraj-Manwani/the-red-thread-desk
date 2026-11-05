@@ -3,6 +3,7 @@ import { db, isUniqueViolation } from "@/lib/db";
 import { env } from "@/lib/env";
 import { facebook } from "@/lib/facebook";
 import { instagram } from "@/lib/instagram";
+import { whatsapp } from "@/lib/whatsapp";
 
 /** Looks up the account behind a token from .env. */
 async function fromEnv(channel: Channel) {
@@ -11,6 +12,18 @@ async function fromEnv(channel: Channel) {
     if (!token) throw new Error("No Instagram account connected. Set INSTAGRAM_ACCESS_TOKEN.");
     const me = await instagram.me(token);
     return { externalId: me.user_id, username: me.username, accessToken: token };
+  }
+  if (channel === "WHATSAPP") {
+    const { WHATSAPP_ACCESS_TOKEN: token, WHATSAPP_PHONE_NUMBER_ID: phoneId } = env();
+    if (!token || !phoneId) {
+      throw new Error("No WhatsApp number connected. Set WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_ACCESS_TOKEN.");
+    }
+    const number = await whatsapp.phoneNumber(token, phoneId);
+    return {
+      externalId: phoneId,
+      username: number.verified_name ?? number.display_phone_number ?? null,
+      accessToken: token,
+    };
   }
   const token = env().FACEBOOK_PAGE_ACCESS_TOKEN;
   if (!token) throw new Error("No Facebook Page connected. Set FACEBOOK_PAGE_ACCESS_TOKEN.");

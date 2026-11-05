@@ -47,6 +47,10 @@ const tone: Record<NodeType, string> = {
   link: "border-green-300 bg-white",
   tag: "border-neutral-300 bg-white",
   condition: "border-indigo-300 bg-white",
+  handoff: "border-orange-400 bg-orange-50",
+  designs: "border-pink-300 bg-white",
+  optIn: "border-lime-400 bg-lime-50",
+  payment: "border-emerald-400 bg-emerald-50",
 };
 
 function summary(node: FlowNode): string {
@@ -74,6 +78,17 @@ function summary(node: FlowNode): string {
         return node.data.equals ? `${node.data.field} = “${node.data.equals}”?` : `${node.data.field} answered?`;
       }
       return "Follows us?";
+    case "handoff":
+      return `${node.data.text}\n(bot pauses for 24 h, you get a notification)`;
+    case "optIn":
+      return `${node.data.text}\n[${node.data.yesTitle}] [${node.data.noTitle}]`;
+    case "designs":
+      return `Carousel of ${node.data.occasion ? `“${node.data.occasion}”` : "all"} designs with Preview / Buy`;
+    case "payment": {
+      const d = node.data;
+      const amount = d.amount === "fixed" ? `₹${d.fixedInr} for ${d.description || "…"}` : `the chosen ${d.amount}'s price`;
+      return `Razorpay link for ${amount}`;
+    }
   }
 }
 
@@ -213,6 +228,8 @@ function Editor({
                 <option value="email">Email</option>
                 <option value="phone">Phone</option>
                 <option value="date">Date</option>
+                <option value="url">Link (e.g. Google Maps)</option>
+                <option value="photo">Photo(s)</option>
               </select>
             </label>
           </div>
@@ -369,6 +386,144 @@ function Editor({
       );
       break;
     }
+  }
+
+  if (node.type === "optIn") {
+    const d = node.data;
+    body = (
+      <>
+        <label className="block">
+          <Label>Question</Label>
+          <textarea className={inputClass} rows={3} value={d.text} onChange={(e) => update({ text: e.target.value })} />
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block">
+            <Label>Yes button</Label>
+            <input
+              className={inputClass}
+              maxLength={BUTTON_TITLE_LIMIT}
+              value={d.yesTitle}
+              onChange={(e) => update({ yesTitle: e.target.value })}
+            />
+          </label>
+          <label className="block">
+            <Label>No button</Label>
+            <input
+              className={inputClass}
+              maxLength={BUTTON_TITLE_LIMIT}
+              value={d.noTitle}
+              onChange={(e) => update({ noTitle: e.target.value })}
+            />
+          </label>
+        </div>
+        <p className="text-xs text-neutral-500">
+          “Yes” records consent for WhatsApp broadcasts (marketing templates). Only opted-in contacts get broadcasts;
+          STOP clears it.
+        </p>
+      </>
+    );
+  }
+
+  if (node.type === "designs") {
+    const d = node.data;
+    body = (
+      <>
+        <label className="block">
+          <Label>Text before the carousel (optional)</Label>
+          <textarea className={inputClass} rows={2} value={d.text} onChange={(e) => update({ text: e.target.value })} />
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block">
+            <Label>Occasion (empty = all)</Label>
+            <input
+              className={inputClass}
+              value={d.occasion}
+              placeholder="wedding or {occasion}"
+              onChange={(e) => update({ occasion: e.target.value })}
+            />
+          </label>
+          <label className="block">
+            <Label>Save choice as</Label>
+            <input className={inputClass} value={d.field} onChange={(e) => update({ field: e.target.value })} />
+          </label>
+        </div>
+        <p className="text-xs text-neutral-500">
+          Shows up to 10 catalogue designs marked “in carousel”. Buy picks one; a Payment link step after it can charge
+          the design&apos;s price.
+        </p>
+      </>
+    );
+  }
+
+  if (node.type === "payment") {
+    const d = node.data;
+    body = (
+      <>
+        <label className="block">
+          <Label>Text before the link</Label>
+          <textarea className={inputClass} rows={2} value={d.text} onChange={(e) => update({ text: e.target.value })} />
+        </label>
+        {vars}
+        <label className="block">
+          <Label>Amount</Label>
+          <select
+            className={inputClass}
+            value={d.amount}
+            onChange={(e) => update({ amount: e.target.value as typeof d.amount })}
+          >
+            <option value="package">Chosen package&apos;s price</option>
+            <option value="design">Chosen design&apos;s price</option>
+            <option value="fixed">Fixed amount</option>
+          </select>
+        </label>
+        {d.amount === "fixed" && (
+          <div className="grid grid-cols-2 gap-2">
+            <label className="block">
+              <Label>Amount (₹)</Label>
+              <input
+                className={inputClass}
+                type="number"
+                min={1}
+                value={d.fixedInr}
+                onChange={(e) => update({ fixedInr: Number(e.target.value) })}
+              />
+            </label>
+            <label className="block">
+              <Label>For</Label>
+              <input className={inputClass} value={d.description} onChange={(e) => update({ description: e.target.value })} />
+            </label>
+          </div>
+        )}
+        <label className="block">
+          <Label>After payment</Label>
+          <input className={inputClass} value={d.paidText} onChange={(e) => update({ paidText: e.target.value })} />
+        </label>
+        <label className="block">
+          <Label>If the link expires (7 days) or is cancelled</Label>
+          <input className={inputClass} value={d.expiredText} onChange={(e) => update({ expiredText: e.target.value })} />
+        </label>
+        <p className="text-xs text-neutral-500">
+          Creates an order and a Razorpay link, then waits. “paid” continues when Razorpay confirms; put the detail
+          questions (couple_names, event_date, venue, maps_link, photos) after it and they are saved on the order.
+        </p>
+      </>
+    );
+  }
+
+  if (node.type === "handoff") {
+    const d = node.data;
+    body = (
+      <>
+        <label className="block">
+          <Label>Message before handing off</Label>
+          <textarea className={inputClass} rows={3} value={d.text} onChange={(e) => update({ text: e.target.value })} />
+        </label>
+        <p className="text-xs text-neutral-500">
+          The flow ends here. The bot stays quiet with this person for 24 hours and you get a push notification. Reply
+          from the inbox.
+        </p>
+      </>
+    );
   }
 
   return (

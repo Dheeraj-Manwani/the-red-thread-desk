@@ -1,9 +1,11 @@
 import { db } from "@/lib/db";
 import { handleComment } from "@/lib/engine/comments";
 import { handleMessage } from "@/lib/engine/messages";
+import { handleRazorpayEvent } from "@/lib/engine/payments";
+import { handleTemplateUpdate, handleWaStatus } from "@/lib/engine/whatsapp-events";
 import type { StoredEvent } from "@/lib/engine/types";
 
-const IGNORED = new Set(["own_comment", "own_message", "echo", "duplicate", "no_session", "ignored"]);
+const IGNORED = new Set(["own_comment", "own_message", "echo", "duplicate", "no_session", "ignored", "stale_button", "unknown_order", "unknown_template"]);
 
 /** Runs one saved webhook event and records the outcome on it. */
 export async function processEvent(eventId: string) {
@@ -15,7 +17,13 @@ export async function processEvent(eventId: string) {
     const result =
       stored.kind === "comment"
         ? await handleComment(stored.channel, stored.comment, stored.accountId)
-        : await handleMessage(stored.channel, stored.value, stored.accountId);
+        : stored.kind === "message"
+          ? await handleMessage(stored.channel, stored.value, stored.accountId)
+          : stored.kind === "razorpay"
+            ? await handleRazorpayEvent(stored.event)
+            : stored.kind === "wa_status"
+              ? await handleWaStatus(stored.status)
+              : await handleTemplateUpdate(stored.update);
     await db.webhookEvent.update({
       where: { id: eventId },
       data: { status: IGNORED.has(result) ? "IGNORED" : "PROCESSED", error: result, processedAt: new Date() },

@@ -72,5 +72,31 @@ export function messageBody(text: string, quickReplies?: QuickReply[]) {
   };
 }
 
+/** One card of a generic template (carousel). Max 3 buttons; titles 80 characters. */
+export type CarouselCard = {
+  title: string;
+  subtitle?: string;
+  imageUrl?: string;
+  buttons: ({ type: "web_url"; title: string; url: string } | { type: "postback"; title: string; payload: string })[];
+};
+
+/** Generic template body. Same shape on Instagram and Messenger. */
+export function carouselBody(cards: CarouselCard[]) {
+  return {
+    attachment: {
+      type: "template",
+      payload: {
+        template_type: "generic",
+        elements: cards.slice(0, 10).map((c) => ({
+          title: c.title.slice(0, 80),
+          ...(c.subtitle ? { subtitle: c.subtitle.slice(0, 80) } : {}),
+          ...(c.imageUrl ? { image_url: c.imageUrl } : {}),
+          buttons: c.buttons.slice(0, 3).map((b) => ({ ...b, title: b.title.slice(0, 20) })),
+        })),
+      },
+    },
+  };
+}
+
 /** Response of a send or private reply. recipient_id is the IGSID / PSID for later DMs. */
 export type SendResult = { recipient_id?: string; message_id?: string };

@@ -2,6 +2,8 @@ import {
   graphCall,
   GraphApiError,
   messageBody,
+  carouselBody,
+  type CarouselCard,
   type GraphMethod,
   type GraphOptions,
   type IceBreakerAction,
@@ -44,6 +46,13 @@ export const instagram = {
   sendMessage(token: string, igUserId: string, recipientId: string, text: string, quickReplies?: QuickReply[]) {
     return call<SendResult>(token, "POST", `${igUserId}/messages`, {
       body: { recipient: { id: recipientId }, message: messageBody(text, quickReplies) },
+    });
+  },
+
+  /** Generic template (carousel). Inside the 24 h window only. */
+  sendCarousel(token: string, igUserId: string, recipientId: string, cards: CarouselCard[]) {
+    return call<SendResult>(token, "POST", `${igUserId}/messages`, {
+      body: { recipient: { id: recipientId }, message: carouselBody(cards) },
     });
   },
 

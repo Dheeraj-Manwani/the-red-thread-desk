@@ -2,6 +2,7 @@ import { saveTrigger } from "@/app/actions";
 import { buttonClass, Card, Field, inputClass } from "@/components/ui";
 import type { Channel, Trigger, TriggerKind } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
+import { aiConfigured, INTENTS, intentLabels } from "@/lib/ai";
 import { loadRecentMedia } from "@/lib/media";
 
 const defaults = {
@@ -9,6 +10,7 @@ const defaults = {
   active: true,
   scope: "POSTS",
   flowId: null as string | null,
+  intents: [] as string[],
   mediaIds: [] as string[],
   keywords: ["link", "लिंक", "price", "kitn*", "rate", "details"],
   excludeWords: [] as string[],
@@ -41,16 +43,20 @@ export async function TriggerForm({
   channel: Channel;
   kind: TriggerKind;
 }) {
-  const isStory = kind === "STORY_REPLY";
+  const isDm = kind === "DM_KEYWORD";
+  // Story replies and DM keywords work the same way: a message, no posts to pick.
+  const isStory = kind === "STORY_REPLY" || isDm;
   const isInstagram = channel === "INSTAGRAM";
-  const t = trigger ?? (isStory ? storyDefaults : defaults);
+  const t =
+    trigger ?? (isDm ? { ...storyDefaults, dmText: "Thanks for your message! 💌", keywords: ["price", "kitn*", "rate"] } : isStory ? storyDefaults : defaults);
   const [{ items: media, error }, flows] = await Promise.all([
     isStory ? { items: [], error: null } : loadRecentMedia(channel),
     db.flow.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
   const knownIds = new Set(media.map((m) => m.id));
   const extraIds = t.mediaIds.filter((id) => !knownIds.has(id));
-  const thing = isStory ? "story reply" : "comment";
+  const thing = isDm ? "message" : isStory ? "story reply" : "comment";
+  const ai = aiConfigured();
 
   return (
     <form action={saveTrigger} className="space-y-6">
@@ -81,7 +87,7 @@ export async function TriggerForm({
             <select name="scope" defaultValue={t.scope} className={inputClass}>
               {isStory ? (
                 <>
-                  <option value="ALL_POSTS">Every story</option>
+                  <option value="ALL_POSTS">{isDm ? "Every DM" : "Every story"}</option>
                   <option value="DEFAULT">Default (fallback)</option>
                 </>
               ) : (
@@ -102,7 +108,7 @@ export async function TriggerForm({
             </label>
             <label className="flex items-center gap-2">
               <input type="checkbox" name="oncePerPerson" defaultChecked={t.oncePerPerson} /> Once per person per{" "}
-              {isStory ? "story" : "post"}
+              {isDm ? "automation" : isStory ? "story" : "post"}
             </label>
           </div>
         </div>
@@ -145,11 +151,29 @@ export async function TriggerForm({
       <Card className="space-y-4">
         <h2 className="font-medium">Keywords</h2>
         <Field
-          label={isStory ? "Story reply keywords" : "Comment keywords"}
+          label={isDm ? "Message keywords" : isStory ? "Story reply keywords" : "Comment keywords"}
           hint={`English, Hindi or Hinglish. One per line. kitn* matches kitna, kitne, kitni. Leave empty to answer every ${thing}.`}
         >
           <textarea name="keywords" rows={4} defaultValue={t.keywords.join("\n")} className={inputClass} />
         </Field>
+        {isDm && (
+          <div className="space-y-1 text-sm">
+            <span className="font-medium">Also when the AI reads the message as</span>
+            <div className="flex flex-wrap gap-3">
+              {INTENTS.filter((i) => i !== "human" && i !== "other").map((i) => (
+                <label key={i} className="flex items-center gap-1">
+                  <input type="checkbox" name="intents" value={i} defaultChecked={t.intents.includes(i)} /> {intentLabels[i]}
+                </label>
+              ))}
+            </div>
+            <p className="text-xs text-neutral-500">
+              {ai
+                ? "Used only when no keyword matched. “Wants a person” always hands off to you."
+                : "AI is off: set ANTHROPIC_API_KEY to use intents."}{" "}
+              DM keyword automations need at least one keyword or intent; they never answer every message.
+            </p>
+          </div>
+        )}
         <Field label={`Skip ${thing}s containing`}>
           <textarea name="excludeWords" rows={2} defaultValue={t.excludeWords.join("\n")} className={inputClass} />
         </Field>

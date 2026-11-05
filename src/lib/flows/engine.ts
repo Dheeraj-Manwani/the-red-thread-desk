@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { rememberDmId } from "@/lib/engine/contacts";
 import { payloads } from "@/lib/engine/payloads";
 import {
+  CAROUSEL_LIMIT,
   MAX_ANSWER_RETRIES,
   MAX_FOLLOW_CHECKS,
   nextNodeId,
@@ -14,15 +15,27 @@ import {
   type FlowNode,
 } from "@/lib/flows/graph";
 import { errorText, type QuickReply } from "@/lib/graph";
+import { displayName, notifyAbout, replyWindowOpen, startHandoff } from "@/lib/inbox";
+import { createOrderWithLink, orderLabel, saveOrderDetail } from "@/lib/orders";
 import { createShortLink } from "@/lib/shortlink";
+import { normalizePhone } from "@/lib/whatsapp";
 
 const MAX_STEPS = 40;
 const RECHECK_DELAY_MS = 3000;
 const OPEN_RUN_DAYS = 7;
-const WAITING: FlowRunStatus[] = ["WAITING_BUTTON", "WAITING_ANSWER", "WAITING_FOLLOW", "WAITING_REPLY"];
+const WAITING: FlowRunStatus[] = [
+  "WAITING_BUTTON",
+  "WAITING_ANSWER",
+  "WAITING_FOLLOW",
+  "WAITING_REPLY",
+  "WAITING_PAYMENT",
+];
 
 type Vars = {
   package?: { id: string; name: string; priceInr: number; url: string };
+  design?: { id: string; name: string; priceInr: number | null; previewUrl: string | null };
+  /** The order this run is paying for or collecting details for. */
+  orderId?: string;
   retries?: Record<string, number>;
   followChecks?: Record<string, number>;
   initialFollower?: boolean | null;
@@ -65,6 +78,7 @@ function interpolate(ctx: Ctx, text: string) {
         return ctx.client.channel === "INSTAGRAM" ? `@${name}` : name;
       }
       if (key === "package") return ctx.vars.package?.name ?? "";
+      if (key === "design") return ctx.vars.design?.name ?? "";
       if (key === "package_price") return ctx.vars.package ? `₹${rupees.format(ctx.vars.package.priceInr)}` : "";
       return fields(ctx.contact)[key] ?? "";
     })
@@ -111,6 +125,8 @@ function validAnswer(kind: AnswerKind, raw: string): string | null {
       const digits = text.replace(/[^\d+]/g, "");
       return /^\+?\d{10,15}$/.test(digits) ? digits : null;
     }
+    case "url":
+      return /^https?:\/\/\S+$/i.test(text) ? text : /^\S+\.\S+$/.test(text) ? `https://${text}` : null;
     case "date":
       return /\d/.test(text) || /jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec/i.test(text) ? text : null;
     default:
@@ -120,7 +136,33 @@ function validAnswer(kind: AnswerKind, raw: string): string | null {
 
 async function setField(ctx: Ctx, field: string, value: string) {
   const next = { ...fields(ctx.contact), [field]: value };
-  ctx.contact = await db.contact.update({ where: { id: ctx.contact.id }, data: { fields: next } });
+  // A "phone" answer links this contact to the same person on other channels (WhatsApp).
+  const phone = field === "phone" ? normalizePhone(value) : null;
+  ctx.contact = await db.contact.update({
+    where: { id: ctx.contact.id },
+    data: { fields: next, ...(phone ? { phone } : {}) },
+  });
+  // Answers after a payment are order details too (couple_names, venue, event_date...).
+  if (ctx.vars.orderId) await saveOrderDetail(ctx.vars.orderId, field, value);
+}
+
+async function carouselDesigns(ctx: Ctx, occasion: string) {
+  const wanted = interpolate(ctx, occasion).trim();
+  return db.catalogueItem.findMany({
+    where: {
+      active: true,
+      showInCarousel: true,
+      ...(wanted ? { occasion: { contains: wanted, mode: "insensitive" } } : {}),
+    },
+    orderBy: [{ position: "asc" }, { priceInr: "asc" }],
+    take: CAROUSEL_LIMIT,
+  });
+}
+
+async function paymentLink(ctx: Ctx) {
+  if (!ctx.vars.orderId) return null;
+  const order = await db.order.findUnique({ where: { id: ctx.vars.orderId } });
+  return order?.paymentStatus === "UNPAID" ? order : null;
 }
 
 async function tagIds(names: string[]) {
@@ -234,6 +276,68 @@ async function execNode(ctx: Ctx, node: FlowNode): Promise<Outcome> {
       }
       if (remove.length) await db.contactTag.deleteMany({ where: { contactId: ctx.contact.id, tagId: { in: remove } } });
       return { next: "next" };
+    }
+
+    case "designs": {
+      // Carousels can't go in a private reply: open the conversation first.
+      if (ctx.privateReplyTo || !ctx.canSend || !ctx.senderId) throw new PauseForReply();
+      const list = await carouselDesigns(ctx, node.data.occasion);
+      if (list.length === 0) {
+        console.warn("[flow] design carousel has no designs to show; skipping", node.id);
+        return { next: "next" };
+      }
+      if (node.data.text.trim()) await send(ctx, interpolate(ctx, node.data.text));
+      await ctx.client.sendCarousel(
+        ctx.senderId,
+        list.map((d) => ({
+          title: d.name,
+          subtitle: [d.priceInr ? `₹${rupees.format(d.priceInr)}` : "", d.occasion ?? ""].filter(Boolean).join(" · "),
+          imageUrl: d.imageUrl ?? undefined,
+          buttons: [
+            ...(d.previewUrl ? [{ type: "web_url" as const, title: "Preview", url: d.previewUrl }] : []),
+            { type: "postback" as const, title: "Buy", payload: payloads.flow(runId, node.id, d.id) },
+          ],
+        })),
+      );
+      return { wait: "WAITING_BUTTON" };
+    }
+
+    case "optIn": {
+      await send(ctx, interpolate(ctx, node.data.text), [
+        { title: node.data.yesTitle, payload: payloads.flow(runId, node.id, "yes") },
+        { title: node.data.noTitle, payload: payloads.flow(runId, node.id, "no") },
+      ]);
+      return { wait: "WAITING_BUTTON" };
+    }
+
+    case "payment": {
+      // Re-entering the step (e.g. after a pause) reuses the unpaid order instead of making another.
+      let order = await paymentLink(ctx);
+      if (!order) {
+        const d = node.data;
+        const choice =
+          d.amount === "package" && ctx.vars.package
+            ? { title: ctx.vars.package.name, amountInr: ctx.vars.package.priceInr, packageId: ctx.vars.package.id }
+            : d.amount === "design" && ctx.vars.design?.priceInr
+              ? { title: ctx.vars.design.name, amountInr: ctx.vars.design.priceInr, designId: ctx.vars.design.id }
+              : d.amount === "fixed"
+                ? { title: d.description.trim(), amountInr: Math.round(d.fixedInr) }
+                : null;
+        if (!choice) throw new Error(`Payment step: no ${d.amount} chosen before it, so there is no amount.`);
+        order = await createOrderWithLink({ contact: ctx.contact, flowRunId: runId, ...choice });
+        ctx.vars.orderId = order.id;
+      }
+      await send(ctx, `${interpolate(ctx, node.data.text)}\n\n${order.razorpayLinkUrl}\n\nOrder ${orderLabel(order)}`);
+      return { wait: "WAITING_PAYMENT" };
+    }
+
+    case "handoff": {
+      await send(ctx, interpolate(ctx, node.data.text));
+      ctx.contact = await startHandoff(ctx.contact.id, { asked: true });
+      await notifyAbout(ctx.contact, `${displayName(ctx.contact)} is waiting for you`, "Handed off by a flow.", {
+        urgent: true,
+      });
+      return { next: "end" }; // No output: the flow ends here.
     }
 
     case "condition": {
@@ -354,7 +458,7 @@ export async function startFlow(opts: {
 /** Continues a waiting run after the person taps a button or sends a message. */
 export async function resumeFlow(
   runId: string,
-  inbound: { senderId: string; text: string; payload?: { nodeId: string; handle: string } },
+  inbound: { senderId: string; text: string; payload?: { nodeId: string; handle: string }; attachments?: string[] },
 ) {
   const run = await db.flowRun.findUnique({ where: { id: runId }, include: { flow: true, contact: true } });
   if (!run || !WAITING.includes(run.status) || run.contact.optedOut) return "ignored";
@@ -399,6 +503,33 @@ export async function resumeFlow(
           await setField(ctx, node.data.field, chosen.name);
           return runFrom(ctx, nextNodeId(graph, node.id, "next"));
         }
+        if (node.type === "optIn") {
+          const handle =
+            inbound.payload?.handle ??
+            (typed === node.data.yesTitle.trim().toLowerCase() || ["yes", "haan", "ha", "ok"].includes(typed)
+              ? "yes"
+              : typed === node.data.noTitle.trim().toLowerCase() || ["no", "nahi", "na"].includes(typed)
+                ? "no"
+                : null);
+          if (!handle) return runFrom(ctx, node.id);
+          // Explicit consent is what makes WhatsApp marketing broadcasts allowed for this person.
+          ctx.contact = await db.contact.update({
+            where: { id: ctx.contact.id },
+            data: { marketingOptInAt: handle === "yes" ? new Date() : null },
+          });
+          return runFrom(ctx, nextNodeId(graph, node.id, handle));
+        }
+        if (node.type === "designs") {
+          const list = await carouselDesigns(ctx, node.data.occasion);
+          const chosen =
+            list.find((d) => d.id === inbound.payload?.handle) ??
+            (await db.catalogueItem.findFirst({ where: { id: inbound.payload?.handle ?? "__none__" } })) ??
+            list.find((d) => typed && d.name.toLowerCase() === typed);
+          if (!chosen) return runFrom(ctx, node.id);
+          ctx.vars.design = { id: chosen.id, name: chosen.name, priceInr: chosen.priceInr, previewUrl: chosen.previewUrl };
+          await setField(ctx, node.data.field, chosen.name);
+          return runFrom(ctx, nextNodeId(graph, node.id, "next"));
+        }
         if (node.type === "message") {
           const handle =
             inbound.payload?.handle ?? node.data.buttons.find((b) => b.title.trim().toLowerCase() === typed)?.id;
@@ -410,7 +541,12 @@ export async function resumeFlow(
 
       case "WAITING_ANSWER": {
         if (node.type !== "question") return runFrom(ctx, node.id);
-        const value = validAnswer(node.data.answer, inbound.text);
+        const value =
+          node.data.answer === "photo"
+            ? inbound.attachments?.length
+              ? inbound.attachments.join("\n")
+              : null
+            : validAnswer(node.data.answer, inbound.text);
         if (value !== null) {
           await setField(ctx, node.data.field, value);
           return runFrom(ctx, nextNodeId(graph, node.id, "next"));
@@ -423,9 +559,51 @@ export async function resumeFlow(
         return "flow_waiting";
       }
 
+      case "WAITING_PAYMENT": {
+        // They wrote while we wait for Razorpay: remind them of the link.
+        const order = await paymentLink(ctx);
+        if (!order) return "ignored";
+        await send(ctx, `Here's your payment link again:\n\n${order.razorpayLinkUrl}\n\nOrder ${orderLabel(order)}`);
+        await save(ctx, { status: "WAITING_PAYMENT", nodeId: node.id });
+        return "payment_reminded";
+      }
+
       default:
         return "ignored";
     }
+  });
+}
+
+/**
+ * Razorpay said the order's link was paid (or expired / was cancelled): continue the run.
+ * Messages go out only if the 24 h window is still open; otherwise the next step waits for a reply.
+ */
+export async function continueAfterPayment(runId: string, outcome: "paid" | "expired") {
+  const run = await db.flowRun.findUnique({ where: { id: runId }, include: { flow: true, contact: true } });
+  if (!run || run.status !== "WAITING_PAYMENT") return "ignored";
+  const { flow, contact, ...rest } = run;
+  const graph = parseGraph(flow.graph);
+  const node = graph.nodes.find((n) => n.id === run.nodeId);
+  const client = await getClient(run.channel);
+  const ctx: Ctx = {
+    client,
+    run: rest,
+    graph,
+    contact,
+    vars: (run.vars ?? {}) as Vars,
+    senderId: contact.dmId ?? contact.externalId,
+    privateReplyTo: null,
+    openingText: "",
+    canSend: replyWindowOpen(contact) && !contact.optedOut,
+    recheck: false,
+    followGained: false,
+  };
+  return guarded(ctx, async () => {
+    if (!node || node.type !== "payment") return runFrom(ctx, null);
+    const text = outcome === "paid" ? node.data.paidText : node.data.expiredText;
+    if (text.trim() && ctx.canSend) await send(ctx, interpolate(ctx, text));
+    if (outcome === "expired") ctx.vars.orderId = undefined;
+    return runFrom(ctx, nextNodeId(graph, node.id, outcome));
   });
 }
 

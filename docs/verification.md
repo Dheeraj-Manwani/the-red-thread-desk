@@ -44,6 +44,51 @@ Tags: [Certain] / [Likely] / [Guessing] = how sure we are the code matches Meta'
 - [ ] Tags are added/removed; the condition node branches on tag, field or follower.
 - [ ] A flow started from an ice breaker or a story reply can send straight away.
 
+## Phase 4: Inbox, contacts, handoff, push
+
+- [ ] Every DM in and out shows in `/inbox/[id]`: the person, Bot, You (inbox), You (app).
+- [ ] Our own API sends come back as echoes and are **not** shown twice (deduped by `mid`, 3 s head start). [Likely]
+- [ ] Messenger echoes arrive once `message_echoes` is subscribed (Facebook card in Settings). Instagram sends echoes on `messages`. [Likely]
+- [ ] Replying by hand in the Instagram / Messenger app pauses the bot for 24 h (echo with an unknown `mid`). [Likely]
+- [ ] "human" / "agent" / "baat karni hai" etc. → ack message, bot paused, "wants you" badge, urgent push.
+- [ ] While paused: comments are logged with skip reason `handoff` (no DM), and DMs only notify.
+- [ ] Inbox reply works inside 24 h and is blocked after (Meta's standard window; no HUMAN_AGENT tag). [Certain: Meta rule]
+- [ ] Facebook reply goes to the PSID learnt from the private reply (`Contact.dmId`). [Likely]
+- [ ] "Hand off to me" flow step ends the flow, pauses the bot, notifies.
+- [ ] Push: turn on in Settings over **https** (the tunnel), get the test push, tap opens the conversation. Needs `VAPID_SUBJECT` or an https `APP_URL`.
+- [ ] iPhone: push only after "Add to Home Screen" (iOS 16.4+). [Certain, Next.js PWA guide]
+- [ ] Service worker, manifest and icons load without the basic-auth prompt.
+- [ ] Unread badge clears when a thread is opened; the inbox refreshes every 8 s.
+
+## Phase 5: Sales
+
+- [ ] **Catalogue feed format is a guess.** Point `CATALOGUE_URL` at the Red Thread site's designs JSON; `src/lib/catalogue.ts` lists the field names it accepts. [Guessing] Sync from `/catalogue`, then the daily cron.
+- [ ] Design carousel (generic template) renders on Instagram and Messenger with Preview and Buy; Buy arrives as a postback. [Likely]
+- [ ] Carousel images load (Meta fetches `image_url`; it must be public https).
+- [ ] Razorpay test keys (`rzp_test_`): a flow's Payment link step creates an order and a link; the link opens and pays in test mode.
+- [ ] Webhook at `/api/webhooks/razorpay` with `payment_link.paid / expired / cancelled`; signature check passes; a retry with the same `x-razorpay-event-id` is ignored.
+- [ ] Paid → order Paid, urgent push, the flow continues on "paid" (detail questions fill the order); outside 24 h the thank-you is skipped.
+- [ ] Inbox "Send payment link" (package or custom amount) and order page "New link" / "Mark paid".
+- [ ] Orders board: drag between stages sticks after refresh; list view; days-to-event.
+- [ ] Photo answers: Instagram/Messenger attachment URLs are CDN links that may expire. [Likely]. Copy photos you need.
+- [ ] Revenue shows on the dashboard and per post in `/stats` (flow-started orders only).
+
+## Phase 6: WhatsApp, broadcasts, AI intent, dashboard
+
+- [ ] **Coexistence onboarding** of your current WhatsApp Business number (Meta's Embedded Signup flow; your phone app keeps working). Then `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_BUSINESS_ACCOUNT_ID`, a system-user `WHATSAPP_ACCESS_TOKEN`. [Likely]: confirm your own app can run Coexistence signup without a BSP.
+- [ ] Webhook `/api/webhooks/whatsapp` verifies; fields `messages`, `message_template_status_update`, `smb_message_echoes`; signed with the Meta app secret (`FACEBOOK_APP_SECRET`). [Likely]
+- [ ] Inbound text, button and list replies reach flows; ≤3 choices = reply buttons, 4–10 = list menu; designs = list with preview links.
+- [ ] Replies you type in the WhatsApp Business app arrive as `smb_message_echoes` and pause the bot. [Likely]
+- [ ] WhatsApp photos open through `/api/whatsapp/media/<id>` (needs your login).
+- [ ] WhatsApp "ice breakers" = conversational prompts; a tap arrives as the prompt text. [Likely]
+- [ ] Same phone across channels shows "Also on …" in the inbox (a link, not a merge).
+- [ ] DM keyword automations on IG, Messenger and WhatsApp; catch-all (no keyword, no intent) is refused on save.
+- [ ] Opt-in flow step sets consent; STOP clears it; broadcasts go only to opted-in WhatsApp contacts.
+- [ ] Template submit → PENDING → APPROVED by webhook; "Sync from WhatsApp" matches Meta.
+- [ ] Broadcast review shows count × rate × 1.18; send-now runs right away, the every-minute cron continues; delivered/read/failed update from statuses. Rates in `.env` are estimates [Likely]: check Meta's India rate card.
+- [ ] AI intent: set `ANTHROPIC_API_KEY`; Hinglish samples ("kitne ka hai", "designs dikhao", "mera invite kab milega", "kisi se baat karni hai") land on the right intent; cost logs in Settings; the cap stops calls.
+- [ ] Dashboard today/7-day numbers, handoffs, closing windows, top posts, spend; Stats funnel and revenue by channel.
+
 ## Before production (not code)
 
 - [ ] Meta **App Review** + Advanced Access for comment and messaging permissions, and **business verification**. Needed for webhooks from people without an app role. [Certain, Meta docs]

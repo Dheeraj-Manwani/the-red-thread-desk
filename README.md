@@ -5,6 +5,11 @@ Comment-to-DM automation for Red Thread on Instagram and Facebook.
 - **Phase 1:** per-post comment automations, follow gate (Instagram), tracked links, comment log, STOP/START, token refresh.
 - **Phase 2:** Facebook Page comments and Messenger on the same engine, per-post stats, Instagram story replies, ice breakers.
 - **Phase 3:** flow builder (React Flow) with buttons/branches, questions, a package picker, tags and conditions.
+- **Phase 4:** inbox and contacts for both channels, handoff to you (bot pauses 24 h), PWA with push notifications.
+- **Phase 5:** catalogue sync from the Red Thread site, design carousel, Razorpay payment links + webhook, order
+  intake, orders Kanban.
+- **Phase 6:** WhatsApp Cloud API (Coexistence) in the inbox and flows, DM keyword automations on every channel,
+  templates and broadcasts with a cost preview, AI intent for Hinglish with a monthly cap, full dashboard and funnel.
 
 > **None of this has been verified against Meta yet.** See [docs/verification.md](docs/verification.md).
 
@@ -51,6 +56,32 @@ Real customers need App Review (Advanced Access) and business verification. See 
 4. Webhooks > Page: callback `https://<tunnel>/api/webhooks/facebook`, verify token = `FACEBOOK_VERIFY_TOKEN` (or the
    Instagram one), fields `feed`, `messages`, `messaging_postbacks`.
 5. In `/settings`, click "Subscribe to webhooks" on the Facebook card.
+
+### Razorpay
+
+1. Dashboard > Account & Settings > API keys: put the **test** key ID and secret in `RAZORPAY_KEY_ID` /
+   `RAZORPAY_KEY_SECRET` until everything is verified.
+2. Dashboard > Webhooks: URL `https://<tunnel>/api/webhooks/razorpay`, a secret of your choice in
+   `RAZORPAY_WEBHOOK_SECRET`, events `payment_link.paid`, `payment_link.expired`, `payment_link.cancelled`.
+
+### WhatsApp (Coexistence)
+
+1. Onboard your current WhatsApp Business number to the Cloud API with Coexistence (Meta's Embedded Signup);
+   the WhatsApp Business app on your phone keeps working and its sends reach us as echoes.
+2. Put the phone number ID, WhatsApp Business Account ID and a system-user token in `.env`.
+3. Same Meta app > WhatsApp > Configuration: callback `https://<tunnel>/api/webhooks/whatsapp`, verify token
+   `WHATSAPP_VERIFY_TOKEN`, fields `messages`, `message_template_status_update`, `smb_message_echoes`.
+4. In `/settings`, click "Subscribe to webhooks" on the WhatsApp card.
+
+### AI intent
+
+Set `ANTHROPIC_API_KEY`. Default model `claude-opus-5-5` at low effort (about ₹0.15 per message); set `AI_MODEL`
+to `claude-haiku-5-5` to cut that sharply. `AI_MONTHLY_CAP_USD` stops calls for the month once reached.
+
+### Catalogue
+
+Set `CATALOGUE_URL` to a JSON list of designs on the Red Thread site (`CATALOGUE_TOKEN` if it needs a bearer token).
+The field names it understands are listed at the top of `src/lib/catalogue.ts`.
 
 ## How it works
 

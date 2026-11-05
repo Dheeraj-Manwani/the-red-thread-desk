@@ -7,6 +7,7 @@ import { startFlow } from "@/lib/flows/engine";
 import { chooseTrigger } from "@/lib/engine/triggers";
 import type { InboundComment } from "@/lib/engine/types";
 import { errorText } from "@/lib/graph";
+import { inHandoff, notifyAbout } from "@/lib/inbox";
 
 async function findTrigger(channel: Channel, mediaId: string, text: string) {
   const triggers = await db.trigger.findMany({
@@ -82,6 +83,11 @@ export async function handleComment(channel: Channel, c: InboundComment, account
   };
 
   if (contact.optedOut) return skip("opted_out");
+  // You're talking to them yourself: don't DM over you, but let you know.
+  if (inHandoff(contact)) {
+    await notifyAbout(contact, "New comment while you're chatting", c.text);
+    return skip("handoff");
+  }
 
   if (trigger.oncePerPerson) {
     const already = await db.comment.findFirst({

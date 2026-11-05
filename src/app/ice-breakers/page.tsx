@@ -107,6 +107,7 @@ async function IceBreakers({ searchParams }: { searchParams: SearchParams }) {
       </p>
       <ChannelSection channel="INSTAGRAM" flows={flows} />
       <ChannelSection channel="FACEBOOK" flows={flows} />
+      <ChannelSection channel="WHATSAPP" flows={flows} />
     </div>
   );
 }

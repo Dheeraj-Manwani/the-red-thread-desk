@@ -11,6 +11,11 @@ export function daysAgo(days: number) {
   return new Date(Date.now() - days * 86_400_000);
 }
 
+/** Whole days from now until `date` (negative once it has passed). */
+export function daysUntil(date: Date) {
+  return Math.ceil((date.getTime() - Date.now()) / 86_400_000);
+}
+
 export function formatDateTime(date: Date | null | undefined) {
   return date ? dateTime.format(date) : "—";
 }

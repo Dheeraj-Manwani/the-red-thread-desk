@@ -9,6 +9,7 @@ import { db } from "@/lib/db";
 const scopeLabel = {
   COMMENT: { POSTS: "Chosen posts", ALL_POSTS: "All posts", DEFAULT: "Default (fallback)" },
   STORY_REPLY: { POSTS: "Chosen stories", ALL_POSTS: "Every story", DEFAULT: "Default (fallback)" },
+  DM_KEYWORD: { POSTS: "—", ALL_POSTS: "Every DM", DEFAULT: "Default (fallback)" },
 } as const;
 
 async function TriggerList() {
@@ -42,6 +43,7 @@ async function TriggerList() {
             </div>
             <p className="text-sm text-neutral-600">
               Keywords: {t.keywords.length ? t.keywords.join(", ") : "any text"}
+              {t.intents.length > 0 && ` · AI: ${t.intents.join(", ")}`}
               {t.scope === "POSTS" && ` · ${t.mediaIds.length} post${t.mediaIds.length === 1 ? "" : "s"}`}
             </p>
             <p className="text-sm text-neutral-500">

@@ -1,6 +1,8 @@
 import {
   graphCall,
   messageBody,
+  carouselBody,
+  type CarouselCard,
   type GraphMethod,
   type GraphOptions,
   type IceBreakerAction,
@@ -42,6 +44,13 @@ export const facebook = {
     });
   },
 
+  /** Generic template (carousel). Inside the 24 h window only. */
+  sendCarousel(token: string, pageId: string, psid: string, cards: CarouselCard[]) {
+    return call<SendResult>(token, "POST", `${pageId}/messages`, {
+      body: { recipient: { id: psid }, messaging_type: "RESPONSE", message: carouselBody(cards) },
+    });
+  },
+
   replyToComment(token: string, commentId: string, text: string) {
     return call<{ id: string }>(token, "POST", `${commentId}/comments`, { body: { message: text } });
   },
@@ -54,7 +63,7 @@ export const facebook = {
 
   subscribeWebhooks(token: string, pageId: string) {
     return call<{ success: boolean }>(token, "POST", `${pageId}/subscribed_apps`, {
-      query: { subscribed_fields: "feed,messages,messaging_postbacks" },
+      query: { subscribed_fields: "feed,messages,messaging_postbacks,message_echoes" },
     });
   },
 

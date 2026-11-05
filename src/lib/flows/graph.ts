@@ -7,9 +7,11 @@ export const QUICK_REPLY_LIMIT = 13;
 export const BUTTON_TITLE_LIMIT = 20;
 export const MAX_FOLLOW_CHECKS = 5;
 export const MAX_ANSWER_RETRIES = 2;
+/** Generic template limit on Instagram and Messenger. */
+export const CAROUSEL_LIMIT = 10;
 
 export type Button = { id: string; title: string };
-export type AnswerKind = "text" | "number" | "email" | "phone" | "date";
+export type AnswerKind = "text" | "number" | "email" | "phone" | "date" | "url" | "photo";
 
 export type NodeData = {
   start: Record<string, never>;
@@ -20,6 +22,17 @@ export type NodeData = {
   link: { text: string; url: string; usePackage: boolean };
   tag: { add: string[]; remove: string[] };
   condition: { check: "tag" | "field" | "follower"; tag: string; field: string; equals: string };
+  handoff: { text: string };
+  designs: { text: string; occasion: string; field: string };
+  optIn: { text: string; yesTitle: string; noTitle: string };
+  payment: {
+    text: string;
+    amount: "package" | "design" | "fixed";
+    fixedInr: number;
+    description: string;
+    paidText: string;
+    expiredText: string;
+  };
 };
 
 export type NodeType = keyof NodeData;
@@ -40,6 +53,10 @@ export const nodeLabels: Record<NodeType, string> = {
   link: "Send link",
   tag: "Tags",
   condition: "Condition",
+  handoff: "Hand off to me",
+  designs: "Design carousel",
+  optIn: "WhatsApp offers opt-in",
+  payment: "Payment link",
 };
 
 export const nodeDefaults: { [K in NodeType]: NodeData[K] } = {
@@ -51,6 +68,21 @@ export const nodeDefaults: { [K in NodeType]: NodeData[K] } = {
   link: { text: "Here's your link:", url: "", usePackage: true },
   tag: { add: [], remove: [] },
   condition: { check: "tag", tag: "", field: "", equals: "" },
+  handoff: { text: "Got it! Someone from Red Thread will reply here soon." },
+  designs: { text: "Here are a few designs. Tap Preview to see one live, or Buy to pick it.", occasion: "", field: "design" },
+  optIn: {
+    text: "Can we send you wedding-season offers on WhatsApp now and then? You can reply STOP any time.",
+    yesTitle: "Yes, send offers",
+    noTitle: "No thanks",
+  },
+  payment: {
+    text: "Here's your secure payment link ({package_price}):",
+    amount: "package",
+    fixedInr: 0,
+    description: "",
+    paidText: "Payment received, thank you! 🎉",
+    expiredText: "Your payment link expired. Reply here if you'd like a new one.",
+  },
 };
 
 /** Output handles per node. Message nodes get one per button, or "next" when there are none. */
@@ -69,6 +101,18 @@ export function handlesFor(node: FlowNode): { id: string; label: string }[] {
       return [
         { id: "true", label: "yes" },
         { id: "false", label: "no" },
+      ];
+    case "handoff":
+      return [];
+    case "optIn":
+      return [
+        { id: "yes", label: "yes" },
+        { id: "no", label: "no" },
+      ];
+    case "payment":
+      return [
+        { id: "paid", label: "paid" },
+        { id: "expired", label: "expired / cancelled" },
       ];
     default:
       return [{ id: "next", label: "next" }];
@@ -127,6 +171,24 @@ export function validateGraph(graph: FlowGraph): string[] {
         if (node.data.usePackage && node.data.url && !/^https?:\/\//.test(node.data.url)) {
           problems.push(`${name}: fallback link must start with https://.`);
         }
+        break;
+      case "handoff":
+        if (!node.data.text.trim()) problems.push(`${name}: text is empty.`);
+        break;
+      case "optIn":
+        if (!node.data.text.trim()) problems.push(`${name}: text is empty.`);
+        if (!node.data.yesTitle.trim() || !node.data.noTitle.trim()) problems.push(`${name}: both buttons need a title.`);
+        if (node.data.yesTitle.length > BUTTON_TITLE_LIMIT || node.data.noTitle.length > BUTTON_TITLE_LIMIT) {
+          problems.push(`${name}: buttons are 20 characters max.`);
+        }
+        break;
+      case "designs":
+        if (!FIELD.test(node.data.field)) problems.push(`${name}: field must be lowercase letters, digits and _.`);
+        break;
+      case "payment":
+        if (!node.data.text.trim()) problems.push(`${name}: text is empty.`);
+        if (node.data.amount === "fixed" && !(node.data.fixedInr >= 1)) problems.push(`${name}: amount must be at least ₹1.`);
+        if (node.data.amount === "fixed" && !node.data.description.trim()) problems.push(`${name}: say what the payment is for.`);
         break;
       case "condition":
         if (node.data.check === "tag" && !node.data.tag.trim()) problems.push(`${name}: pick a tag.`);
