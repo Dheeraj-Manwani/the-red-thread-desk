@@ -2,21 +2,27 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { connection } from "next/server";
 import { deleteTrigger, toggleTrigger } from "@/app/actions";
+import { triggerTypeLabel } from "@/app/triggers/trigger-types";
 import { Badge, buttonClass, Card, Loading, PageTitle, secondaryButtonClass } from "@/components/ui";
 import { db } from "@/lib/db";
 
-const scopeLabel = { POSTS: "Chosen posts", ALL_POSTS: "All posts", DEFAULT: "Default (fallback)" } as const;
+const scopeLabel = {
+  COMMENT: { POSTS: "Chosen posts", ALL_POSTS: "All posts", DEFAULT: "Default (fallback)" },
+  STORY_REPLY: { POSTS: "Chosen stories", ALL_POSTS: "Every story", DEFAULT: "Default (fallback)" },
+} as const;
 
 async function TriggerList() {
   await connection();
-  const triggers = await db.commentTrigger.findMany({
-    orderBy: [{ scope: "asc" }, { priority: "desc" }, { createdAt: "desc" }],
+  const triggers = await db.trigger.findMany({
+    orderBy: [{ channel: "asc" }, { kind: "asc" }, { scope: "asc" }, { priority: "desc" }, { createdAt: "desc" }],
     include: { _count: { select: { comments: true, sessions: { where: { status: "LINK_SENT" } } } } },
   });
   if (triggers.length === 0) {
     return (
       <Card>
-        <p className="text-sm text-neutral-600">No automations yet. Create one for a reel, or a default one for every post.</p>
+        <p className="text-sm text-neutral-600">
+          No automations yet. Create one for a reel, a default one for every post, or one for story replies.
+        </p>
       </Card>
     );
   }
@@ -30,15 +36,17 @@ async function TriggerList() {
                 {t.name}
               </Link>
               <Badge tone={t.active ? "green" : "grey"}>{t.active ? "Live" : "Paused"}</Badge>
-              <Badge>{scopeLabel[t.scope]}</Badge>
-              {t.followGate && <Badge tone="amber">Follow gate</Badge>}
+              <Badge>{triggerTypeLabel(t.channel, t.kind)}</Badge>
+              <Badge>{scopeLabel[t.kind][t.scope]}</Badge>
+              {t.followGate && t.channel === "INSTAGRAM" && <Badge tone="amber">Follow gate</Badge>}
             </div>
             <p className="text-sm text-neutral-600">
-              Keywords: {t.keywords.length ? t.keywords.join(", ") : "any comment"}
+              Keywords: {t.keywords.length ? t.keywords.join(", ") : "any text"}
               {t.scope === "POSTS" && ` · ${t.mediaIds.length} post${t.mediaIds.length === 1 ? "" : "s"}`}
             </p>
             <p className="text-sm text-neutral-500">
-              {t._count.comments} comments matched · {t._count.sessions} links sent · {t.linkUrl}
+              {t.kind === "COMMENT" ? `${t._count.comments} comments matched · ` : ""}
+              {t._count.sessions} links sent · {t.linkUrl}
             </p>
           </div>
           <div className="flex gap-2">
@@ -60,7 +68,7 @@ async function TriggerList() {
 export default function TriggersPage() {
   return (
     <>
-      <PageTitle title="Comment automations">
+      <PageTitle title="Automations">
         <Link href="/triggers/new" className={buttonClass}>
           New automation
         </Link>

@@ -14,6 +14,8 @@ export async function createShortLink(data: {
   contactId?: string;
   triggerId?: string;
   sessionId?: string;
+  iceBreakerId?: string;
+  flowRunId?: string;
 }) {
   for (let attempt = 0; attempt < 5; attempt++) {
     try {

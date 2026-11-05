@@ -13,8 +13,12 @@ export const metadata: Metadata = {
 
 const nav = [
   { href: "/", label: "Dashboard" },
-  { href: "/triggers", label: "Comment automations" },
+  { href: "/triggers", label: "Automations" },
+  { href: "/flows", label: "Flows" },
+  { href: "/stats", label: "Stats" },
   { href: "/comments", label: "Comment log" },
+  { href: "/ice-breakers", label: "Ice breakers" },
+  { href: "/packages", label: "Packages" },
   { href: "/settings", label: "Settings" },
 ];
 

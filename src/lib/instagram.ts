@@ -1,69 +1,30 @@
-import { env } from "@/lib/env";
+import {
+  graphCall,
+  GraphApiError,
+  messageBody,
+  type GraphMethod,
+  type GraphOptions,
+  type IceBreakerAction,
+  type QuickReply,
+  type SendResult,
+} from "@/lib/graph";
 
 /** Instagram API with Instagram Login. Docs: developers.facebook.com/docs/instagram-platform */
 const BASE = "https://graph.instagram.com";
 
-export class InstagramApiError extends Error {
-  constructor(
-    message: string,
-    public status: number,
-    public code?: number,
-    public subcode?: number,
-  ) {
-    super(message);
-    this.name = "InstagramApiError";
-  }
-}
+const call = <T>(token: string, method: GraphMethod, path: string, opts?: GraphOptions) =>
+  graphCall<T>(BASE, token, method, path, opts);
 
-type Query = Record<string, string | number | undefined>;
-
-async function call<T>(
-  token: string,
-  method: "GET" | "POST",
-  path: string,
-  { query, body }: { query?: Query; body?: unknown } = {},
-): Promise<T> {
-  const url = new URL(`${BASE}/${env().GRAPH_API_VERSION}/${path.replace(/^\//, "")}`);
-  for (const [k, v] of Object.entries(query ?? {})) if (v !== undefined) url.searchParams.set(k, String(v));
-  const res = await fetch(url, {
-    method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      ...(body ? { "Content-Type": "application/json" } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-    cache: "no-store",
-  });
-  const json = (await res.json().catch(() => ({}))) as {
-    error?: { message?: string; code?: number; error_subcode?: number };
-  } & T;
-  if (!res.ok || json.error) {
-    throw new InstagramApiError(
-      json.error?.message ?? `Instagram API ${res.status}`,
-      res.status,
-      json.error?.code,
-      json.error?.error_subcode,
-    );
-  }
-  return json;
-}
-
-export type QuickReply = { title: string; payload: string };
-
-function message(text: string, quickReplies?: QuickReply[]) {
-  return {
-    text,
-    ...(quickReplies?.length
-      ? {
-          quick_replies: quickReplies.map((q) => ({
-            content_type: "text",
-            title: q.title.slice(0, 20),
-            payload: q.payload,
-          })),
-        }
-      : {}),
-  };
-}
+export type InstagramMedia = {
+  id: string;
+  caption?: string;
+  media_type: string;
+  media_product_type?: string;
+  media_url?: string;
+  thumbnail_url?: string;
+  permalink: string;
+  timestamp: string;
+};
 
 export const instagram = {
   me(token: string) {
@@ -74,15 +35,15 @@ export const instagram = {
 
   /** One DM per comment, within 7 days of the comment. */
   privateReply(token: string, igUserId: string, commentId: string, text: string, quickReplies?: QuickReply[]) {
-    return call<{ recipient_id: string; message_id: string }>(token, "POST", `${igUserId}/messages`, {
-      body: { recipient: { comment_id: commentId }, message: message(text, quickReplies) },
+    return call<SendResult>(token, "POST", `${igUserId}/messages`, {
+      body: { recipient: { comment_id: commentId }, message: messageBody(text, quickReplies) },
     });
   },
 
   /** Only inside the 24 h window opened by the person's last message. */
   sendMessage(token: string, igUserId: string, recipientId: string, text: string, quickReplies?: QuickReply[]) {
-    return call<{ recipient_id: string; message_id: string }>(token, "POST", `${igUserId}/messages`, {
-      body: { recipient: { id: recipientId }, message: message(text, quickReplies) },
+    return call<SendResult>(token, "POST", `${igUserId}/messages`, {
+      body: { recipient: { id: recipientId }, message: messageBody(text, quickReplies) },
     });
   },
 
@@ -98,18 +59,7 @@ export const instagram = {
   },
 
   recentMedia(token: string, igUserId: string, limit = 30) {
-    return call<{
-      data: {
-        id: string;
-        caption?: string;
-        media_type: string;
-        media_product_type?: string;
-        media_url?: string;
-        thumbnail_url?: string;
-        permalink: string;
-        timestamp: string;
-      }[];
-    }>(token, "GET", `${igUserId}/media`, {
+    return call<{ data: InstagramMedia[] }>(token, "GET", `${igUserId}/media`, {
       query: {
         fields: "id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp",
         limit,
@@ -119,7 +69,19 @@ export const instagram = {
 
   subscribeWebhooks(token: string, igUserId: string) {
     return call<{ success: boolean }>(token, "POST", `${igUserId}/subscribed_apps`, {
-      query: { subscribed_fields: "comments,messages" },
+      query: { subscribed_fields: "comments,messages,messaging_postbacks" },
+    });
+  },
+
+  /** Up to 4 questions. Taps arrive as postbacks (messaging_postbacks field). */
+  setIceBreakers(token: string, actions: IceBreakerAction[]) {
+    if (actions.length === 0) {
+      return call<{ result?: string }>(token, "DELETE", "me/messenger_profile", {
+        body: { platform: "instagram", fields: ["ice_breakers"] },
+      });
+    }
+    return call<{ result?: string }>(token, "POST", "me/messenger_profile", {
+      body: { platform: "instagram", ice_breakers: [{ call_to_actions: actions, locale: "default" }] },
     });
   },
 
@@ -131,7 +93,7 @@ export const instagram = {
     const res = await fetch(url, { cache: "no-store" });
     const json = (await res.json()) as { access_token?: string; expires_in?: number; error?: { message?: string } };
     if (!res.ok || !json.access_token) {
-      throw new InstagramApiError(json.error?.message ?? "Token refresh failed", res.status);
+      throw new GraphApiError(json.error?.message ?? "Token refresh failed", res.status);
     }
     return { accessToken: json.access_token, expiresIn: json.expires_in ?? 60 * 24 * 3600 };
   },

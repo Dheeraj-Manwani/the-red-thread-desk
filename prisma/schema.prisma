@@ -7,12 +7,21 @@ datasource db {
   provider = "postgresql"
 }
 
-/// The Red Thread Instagram professional account. One row in phase 1.
-model InstagramAccount {
+enum Channel {
+  INSTAGRAM
+  FACEBOOK
+}
+
+/// The connected Instagram professional account or Facebook Page. At most one per channel.
+model Account {
   id             String    @id @default(cuid())
-  igUserId       String    @unique
+  channel        Channel   @unique
+  /// Instagram user ID (webhook entry.id) or Facebook Page ID.
+  externalId     String
+  /// Instagram handle, or the Facebook Page name.
   username       String?
   accessToken    String
+  /// Instagram only. Page tokens made from a long-lived user token don't expire.
   tokenExpiresAt DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -20,47 +29,70 @@ model InstagramAccount {
 
 model Contact {
   id         String        @id @default(cuid())
-  /// Instagram-scoped ID seen on comments.
-  igsid      String        @unique
-  /// Instagram-scoped ID seen on DMs, if it ever differs from igsid.
-  dmIgsid    String?       @unique
+  channel    Channel
+  /// ID seen on comments, or on DMs for people who messaged first.
+  externalId String
+  /// ID seen on DMs (IGSID / PSID) when it differs. Learnt from the private reply response.
+  dmId       String?
+  /// Instagram handle, or the Facebook display name.
   username   String?
   name       String?
   isFollower Boolean?
   optedOut   Boolean       @default(false)
+  /// Answers to flow questions, by field name.
+  fields     Json          @default("{}")
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
   comments   Comment[]
   sessions   LinkSession[]
   links      ShortLink[]
+  tags       ContactTag[]
+  flowRuns   FlowRun[]
+
+  @@unique([channel, externalId])
+  @@unique([channel, dmId])
+}
+
+enum TriggerKind {
+  /// Comments on posts and reels.
+  COMMENT
+  /// Replies to Instagram stories.
+  STORY_REPLY
 }
 
 enum TriggerScope {
   /// Only the chosen posts or reels.
   POSTS
-  /// Every post, checked after post-specific triggers.
+  /// Every post (or every story), checked after post-specific triggers.
   ALL_POSTS
   /// Fallback when nothing else matched.
   DEFAULT
 }
 
-model CommentTrigger {
+/// One automation: which comments or story replies it answers, and what it sends.
+model Trigger {
   id               String        @id @default(cuid())
   name             String
   active           Boolean       @default(true)
+  channel          Channel       @default(INSTAGRAM)
+  kind             TriggerKind   @default(COMMENT)
   scope            TriggerScope  @default(POSTS)
   mediaIds         String[]
-  /// Empty = any comment. A trailing * matches prefixes (kitn* = kitna, kitne).
+  /// Empty = any text. A trailing * matches prefixes (kitn* = kitna, kitne).
   keywords         String[]
   excludeWords     String[]
-  /// One is picked at random. {username} is replaced.
+  /// Comments only. One is picked at random. {username} is replaced.
   publicReplies    String[]
-  dmText           String
+  /// When set, the flow runs instead of the fixed DM → follow → link journey.
+  flowId           String?
+  flow             Flow?         @relation(fields: [flowId], references: [id], onDelete: SetNull)
+  dmText           String        @default("")
   dmButtonText     String        @default("Send me the link")
+  /// Instagram only: Facebook has no follow check.
   followGate       Boolean       @default(true)
   followPromptText String        @default("Follow us first, then tap the button below and the link is yours.")
   followButtonText String        @default("I've followed")
-  linkUrl          String
+  linkUrl          String        @default("")
   linkMessage      String        @default("Here's your link:")
   oncePerPerson    Boolean       @default(true)
   priority         Int           @default(0)
@@ -69,6 +101,9 @@ model CommentTrigger {
   comments         Comment[]
   sessions         LinkSession[]
   links            ShortLink[]
+  flowRuns         FlowRun[]
+
+  @@index([channel, kind, active])
 }
 
 enum EventStatus {
@@ -93,25 +128,29 @@ model WebhookEvent {
 }
 
 model Comment {
-  id            String          @id @default(cuid())
-  commentId     String          @unique
+  id            String       @id @default(cuid())
+  channel       Channel
+  commentId     String
+  /// Instagram media ID or Facebook post ID.
   mediaId       String
   text          String
-  fromIgsid     String
+  fromId        String
   fromUsername  String?
   contactId     String?
-  contact       Contact?        @relation(fields: [contactId], references: [id])
+  contact       Contact?     @relation(fields: [contactId], references: [id])
   triggerId     String?
-  trigger       CommentTrigger? @relation(fields: [triggerId], references: [id], onDelete: SetNull)
-  matched       Boolean         @default(false)
+  trigger       Trigger?     @relation(fields: [triggerId], references: [id], onDelete: SetNull)
+  matched       Boolean      @default(false)
   skipReason    String?
   error         String?
   publicReplyId String?
   dmSentAt      DateTime?
-  createdAt     DateTime        @default(now())
+  createdAt     DateTime     @default(now())
   session       LinkSession?
+  flowRun       FlowRun?
 
-  @@index([mediaId, fromIgsid, triggerId])
+  @@unique([channel, commentId])
+  @@index([channel, mediaId, fromId, triggerId])
   @@index([createdAt])
 }
 
@@ -121,37 +160,150 @@ enum SessionStatus {
   LINK_SENT
 }
 
-/// One comment-to-link journey for one person.
+/// One comment-or-story-reply to link journey for one person.
 model LinkSession {
-  id           String         @id @default(cuid())
-  contactId    String
-  contact      Contact        @relation(fields: [contactId], references: [id])
-  triggerId    String
-  trigger      CommentTrigger @relation(fields: [triggerId], references: [id], onDelete: Cascade)
-  commentId    String         @unique
-  comment      Comment        @relation(fields: [commentId], references: [id], onDelete: Cascade)
-  status       SessionStatus  @default(AWAITING_TAP)
-  followChecks Int            @default(0)
-  linkSentAt   DateTime?
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  shortLink    ShortLink?
+  id              String        @id @default(cuid())
+  channel         Channel
+  contactId       String
+  contact         Contact       @relation(fields: [contactId], references: [id])
+  triggerId       String
+  trigger         Trigger       @relation(fields: [triggerId], references: [id], onDelete: Cascade)
+  /// Set for comment sessions.
+  commentId       String?       @unique
+  comment         Comment?      @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  /// Set for story-reply sessions.
+  storyId         String?
+  status          SessionStatus @default(AWAITING_TAP)
+  followChecks    Int           @default(0)
+  /// Result of the first follow check that got an answer.
+  initialFollower Boolean?
+  /// Not following at the first check, following when the link went out.
+  followGained    Boolean       @default(false)
+  linkSentAt      DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  shortLink       ShortLink?
 
   @@index([contactId, status])
+  @@index([linkSentAt])
+}
+
+/// A question shown when someone opens a new DM thread. Tapping it sends `reply`, plus a tracked link if set.
+model IceBreaker {
+  id        String      @id @default(cuid())
+  channel   Channel
+  question  String
+  reply     String
+  linkUrl   String?
+  /// When set, a tap starts this flow instead of sending `reply`.
+  flowId    String?
+  flow      Flow?       @relation(fields: [flowId], references: [id], onDelete: SetNull)
+  position  Int         @default(0)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  links     ShortLink[]
+
+  @@index([channel, position])
 }
 
 model ShortLink {
-  id             String          @id @default(cuid())
-  code           String          @unique
+  id             String       @id @default(cuid())
+  code           String       @unique
   url            String
   contactId      String?
-  contact        Contact?        @relation(fields: [contactId], references: [id])
+  contact        Contact?     @relation(fields: [contactId], references: [id])
   triggerId      String?
-  trigger        CommentTrigger? @relation(fields: [triggerId], references: [id], onDelete: SetNull)
-  sessionId      String?         @unique
-  session        LinkSession?    @relation(fields: [sessionId], references: [id], onDelete: SetNull)
-  clicks         Int             @default(0)
+  trigger        Trigger?     @relation(fields: [triggerId], references: [id], onDelete: SetNull)
+  sessionId      String?      @unique
+  session        LinkSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  iceBreakerId   String?
+  iceBreaker     IceBreaker?  @relation(fields: [iceBreakerId], references: [id], onDelete: SetNull)
+  flowRunId      String?
+  flowRun        FlowRun?     @relation(fields: [flowRunId], references: [id], onDelete: SetNull)
+  clicks         Int          @default(0)
   firstClickedAt DateTime?
   lastClickedAt  DateTime?
-  createdAt      DateTime        @default(now())
+  createdAt      DateTime     @default(now())
+}
+
+/// A conversation built in the flow builder. `graph` is { nodes, edges } in React Flow's shape.
+model Flow {
+  id          String       @id @default(cuid())
+  name        String
+  graph       Json
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  triggers    Trigger[]
+  iceBreakers IceBreaker[]
+  runs        FlowRun[]
+}
+
+enum FlowRunStatus {
+  /// Waiting for a tap on one of the node's buttons.
+  WAITING_BUTTON
+  /// Waiting for a typed answer to a question.
+  WAITING_ANSWER
+  /// Waiting for a recheck on the follow gate.
+  WAITING_FOLLOW
+  /// Sent the private reply; can't message again until the person replies.
+  WAITING_REPLY
+  DONE
+  FAILED
+}
+
+/// One person going through one flow.
+model FlowRun {
+  id           String        @id @default(cuid())
+  channel      Channel
+  flowId       String
+  flow         Flow          @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  contactId    String
+  contact      Contact       @relation(fields: [contactId], references: [id])
+  triggerId    String?
+  trigger      Trigger?      @relation(fields: [triggerId], references: [id], onDelete: SetNull)
+  commentId    String?       @unique
+  comment      Comment?      @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  storyId      String?
+  status       FlowRunStatus @default(WAITING_REPLY)
+  /// The node the run is waiting on.
+  nodeId       String?
+  /// Run-scoped values: chosen package, retry and follow-check counters.
+  vars         Json          @default("{}")
+  followGained Boolean       @default(false)
+  error        String?
+  startedAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  finishedAt   DateTime?
+  links        ShortLink[]
+
+  @@index([contactId, status, updatedAt])
+}
+
+model Tag {
+  id        String       @id @default(cuid())
+  name      String       @unique
+  createdAt DateTime     @default(now())
+  contacts  ContactTag[]
+}
+
+model ContactTag {
+  contactId String
+  contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tagId     String
+  tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([contactId, tagId])
+}
+
+/// Red Thread packages for the package picker. Synced from the website in phase 5; edited by hand until then.
+model Package {
+  id        String   @id @default(cuid())
+  name      String
+  priceInr  Int
+  url       String
+  active    Boolean  @default(true)
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

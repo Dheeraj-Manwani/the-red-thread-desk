@@ -1,24 +1,50 @@
-import { db } from "@/lib/db";
+import type { Channel } from "@/generated/prisma/client";
+import { db, isUniqueViolation } from "@/lib/db";
 import { env } from "@/lib/env";
+import { facebook } from "@/lib/facebook";
 import { instagram } from "@/lib/instagram";
 
-/** The connected account. Created from INSTAGRAM_ACCESS_TOKEN on first use. */
-export async function getAccount() {
-  const existing = await db.instagramAccount.findFirst({ orderBy: { createdAt: "asc" } });
-  if (existing) return existing;
+/** Looks up the account behind a token from .env. */
+async function fromEnv(channel: Channel) {
+  if (channel === "INSTAGRAM") {
+    const token = env().INSTAGRAM_ACCESS_TOKEN;
+    if (!token) throw new Error("No Instagram account connected. Set INSTAGRAM_ACCESS_TOKEN.");
+    const me = await instagram.me(token);
+    return { externalId: me.user_id, username: me.username, accessToken: token };
+  }
+  const token = env().FACEBOOK_PAGE_ACCESS_TOKEN;
+  if (!token) throw new Error("No Facebook Page connected. Set FACEBOOK_PAGE_ACCESS_TOKEN.");
+  const page = await facebook.me(token);
+  return { externalId: page.id, username: page.name, accessToken: token };
+}
 
-  const token = env().INSTAGRAM_ACCESS_TOKEN;
-  if (!token) throw new Error("No Instagram account connected. Set INSTAGRAM_ACCESS_TOKEN.");
-  const me = await instagram.me(token);
-  return db.instagramAccount.create({
-    data: { igUserId: me.user_id, username: me.username, accessToken: token },
+/** The connected account for a channel. Created from the .env token on first use. */
+export async function getAccount(channel: Channel) {
+  const existing = await db.account.findUnique({ where: { channel } });
+  if (existing) return existing;
+  const data = await fromEnv(channel);
+  try {
+    return await db.account.create({ data: { channel, ...data } });
+  } catch (error) {
+    if (!isUniqueViolation(error)) throw error;
+    return db.account.findUniqueOrThrow({ where: { channel } });
+  }
+}
+
+/** Replaces the stored token with the one in .env (after you generate a new one). */
+export async function reloadAccountFromEnv(channel: Channel) {
+  const data = await fromEnv(channel);
+  return db.account.upsert({
+    where: { channel },
+    create: { channel, ...data },
+    update: { ...data, tokenExpiresAt: null },
   });
 }
 
-export async function refreshAccountToken() {
-  const account = await getAccount();
+export async function refreshInstagramToken() {
+  const account = await getAccount("INSTAGRAM");
   const { accessToken, expiresIn } = await instagram.refreshToken(account.accessToken);
-  return db.instagramAccount.update({
+  return db.account.update({
     where: { id: account.id },
     data: { accessToken, tokenExpiresAt: new Date(Date.now() + expiresIn * 1000) },
   });

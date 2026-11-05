@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { Badge, Card, Loading, PageTitle } from "@/components/ui";
+import { channelLabel } from "@/lib/channels";
 import { db } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
 
@@ -56,14 +57,17 @@ async function CommentTable() {
             {comments.map((c) => (
               <tr key={c.id} className="border-b border-neutral-100 align-top last:border-0">
                 <td className="whitespace-nowrap px-4 py-2 text-neutral-500">{formatDateTime(c.createdAt)}</td>
-                <td className="px-4 py-2">{c.fromUsername ? `@${c.fromUsername}` : c.fromIgsid}</td>
+                <td className="space-y-1 px-4 py-2">
+                  <Badge>{channelLabel[c.channel]}</Badge>
+                  <p>{c.fromUsername ? (c.channel === "INSTAGRAM" ? `@${c.fromUsername}` : c.fromUsername) : c.fromId}</p>
+                </td>
                 <td className="max-w-xs px-4 py-2">{c.text}</td>
                 <td className="px-4 py-2">{c.trigger?.name ?? <span className="text-neutral-400">none</span>}</td>
                 <td className="space-y-1 px-4 py-2">
                   {c.session ? (
-                    <Badge tone={statusTone[c.session.status]}>{c.session.status.replace("_", " ").toLowerCase()}</Badge>
+                    <Badge tone={statusTone[c.session.status]}>{c.session.status.replaceAll("_", " ").toLowerCase()}</Badge>
                   ) : c.skipReason ? (
-                    <Badge>{c.skipReason.replace("_", " ")}</Badge>
+                    <Badge>{c.skipReason.replaceAll("_", " ")}</Badge>
                   ) : (
                     <Badge>no match</Badge>
                   )}
