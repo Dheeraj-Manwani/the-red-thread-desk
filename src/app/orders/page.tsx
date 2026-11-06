@@ -3,6 +3,7 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { Board, type BoardCard } from "@/app/orders/board";
 import { Badge, Card, Loading, PageTitle } from "@/components/ui";
+import { help } from "@/content/help";
 import { db } from "@/lib/db";
 import { daysUntil, formatDateTime } from "@/lib/format";
 import { displayName } from "@/lib/inbox";
@@ -109,7 +110,7 @@ async function Orders({ searchParams }: { searchParams: SearchParams }) {
 export default function OrdersPage({ searchParams }: { searchParams: SearchParams }) {
   return (
     <div className="relative left-1/2 w-[calc(100vw-2rem)] max-w-[1600px] -translate-x-1/2">
-      <PageTitle title="Orders" />
+      <PageTitle title="Orders" help={help.orders} />
       <Suspense fallback={<Loading />}>
         <Orders searchParams={searchParams} />
       </Suspense>

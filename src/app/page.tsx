@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { connection } from "next/server";
 import { Badge, Card, Loading, PageTitle } from "@/components/ui";
+import { help } from "@/content/help";
 import { aiConfigured, aiSpendThisMonth } from "@/lib/ai";
 import { waSpendThisMonth } from "@/lib/broadcasts";
 import { channelLabel } from "@/lib/channels";
@@ -141,7 +142,7 @@ async function Dashboard() {
 export default function DashboardPage() {
   return (
     <>
-      <PageTitle title="Dashboard" />
+      <PageTitle title="Dashboard" help={help.dashboard} />
       <Suspense fallback={<Loading />}>
         <Dashboard />
       </Suspense>

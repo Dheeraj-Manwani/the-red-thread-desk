@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import { deleteIceBreaker, republishIceBreakers, saveIceBreaker } from "@/app/actions";
 import { buttonClass, Card, Field, inputClass, Loading, PageTitle, secondaryButtonClass } from "@/components/ui";
+import { help } from "@/content/help";
 import type { Channel, IceBreaker } from "@/generated/prisma/client";
 import { channelLabel } from "@/lib/channels";
 import { db } from "@/lib/db";
@@ -115,7 +116,7 @@ async function IceBreakers({ searchParams }: { searchParams: SearchParams }) {
 export default function IceBreakersPage({ searchParams }: { searchParams: SearchParams }) {
   return (
     <>
-      <PageTitle title="Ice breakers" />
+      <PageTitle title="Ice breakers" help={help.iceBreakers} />
       <Suspense fallback={<Loading />}>
         <IceBreakers searchParams={searchParams} />
       </Suspense>

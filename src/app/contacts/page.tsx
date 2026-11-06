@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { connection } from "next/server";
 import { Badge, Card, inputClass, Loading, PageTitle, secondaryButtonClass } from "@/components/ui";
+import { help } from "@/content/help";
 import type { Prisma } from "@/generated/prisma/client";
 import { channelLabel } from "@/lib/channels";
 import { db } from "@/lib/db";
@@ -122,7 +123,7 @@ async function ContactTable({ searchParams }: { searchParams: SearchParams }) {
 export default function ContactsPage({ searchParams }: { searchParams: SearchParams }) {
   return (
     <>
-      <PageTitle title="Contacts" />
+      <PageTitle title="Contacts" help={help.contacts} />
       <Suspense fallback={<Loading />}>
         <ContactTable searchParams={searchParams} />
       </Suspense>

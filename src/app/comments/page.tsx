@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { Badge, Card, Loading, PageTitle } from "@/components/ui";
+import { help } from "@/content/help";
 import { channelLabel } from "@/lib/channels";
 import { db } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
@@ -86,7 +87,7 @@ async function CommentTable() {
 export default function CommentsPage() {
   return (
     <>
-      <PageTitle title="Comment log" />
+      <PageTitle title="Comment log" help={help.comments} />
       <Suspense fallback={<Loading />}>
         <CommentTable />
       </Suspense>

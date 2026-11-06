@@ -12,7 +12,9 @@ import {
   takeOver,
 } from "@/app/actions";
 import { AutoRefresh } from "@/app/inbox/auto-refresh";
+import { InfoButton } from "@/components/info-button";
 import { Badge, buttonClass, Card, inputClass, Loading, secondaryButtonClass } from "@/components/ui";
+import { help } from "@/content/help";
 import { channelLabel } from "@/lib/channels";
 import { db } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
@@ -87,6 +89,7 @@ async function Thread({ params }: { params: Promise<{ id: string }> }) {
             ← Inbox
           </Link>
           <h1 className="text-lg font-semibold">{displayName(contact)}</h1>
+          <InfoButton help={help.conversation} />
           <Badge>{channelLabel[contact.channel]}</Badge>
           {contact.handoffAskedAt && <Badge tone="red">asked for you</Badge>}
           {paused ? (

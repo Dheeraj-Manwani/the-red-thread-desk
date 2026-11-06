@@ -3,6 +3,7 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { cancelBroadcast, confirmBroadcast, createBroadcast, createTemplate, syncTemplatesNow } from "@/app/actions";
 import { Badge, buttonClass, Card, Field, inputClass, Loading, PageTitle, secondaryButtonClass } from "@/components/ui";
+import { help } from "@/content/help";
 import type { BroadcastStatus } from "@/generated/prisma/client";
 import { audienceWhere, bodyText, estimateCost, GST, rateFor, variableCount } from "@/lib/broadcasts";
 import { db } from "@/lib/db";
@@ -303,7 +304,7 @@ async function Broadcasts({ searchParams }: { searchParams: SearchParams }) {
 export default function BroadcastsPage({ searchParams }: { searchParams: SearchParams }) {
   return (
     <>
-      <PageTitle title="WhatsApp broadcasts" />
+      <PageTitle title="WhatsApp broadcasts" help={help.broadcasts} />
       <Suspense fallback={<Loading />}>
         <Broadcasts searchParams={searchParams} />
       </Suspense>

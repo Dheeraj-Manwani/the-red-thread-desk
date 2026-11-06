@@ -4,6 +4,7 @@ import { connection } from "next/server";
 import { deleteTrigger, toggleTrigger } from "@/app/actions";
 import { triggerTypeLabel } from "@/app/triggers/trigger-types";
 import { Badge, buttonClass, Card, Loading, PageTitle, secondaryButtonClass } from "@/components/ui";
+import { help } from "@/content/help";
 import { db } from "@/lib/db";
 
 const scopeLabel = {
@@ -70,7 +71,7 @@ async function TriggerList() {
 export default function TriggersPage() {
   return (
     <>
-      <PageTitle title="Automations">
+      <PageTitle title="Automations" help={help.automations}>
         <Link href="/triggers/new" className={buttonClass}>
           New automation
         </Link>

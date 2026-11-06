@@ -3,6 +3,7 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { AutoRefresh } from "@/app/inbox/auto-refresh";
 import { Badge, Card, inputClass, Loading, PageTitle } from "@/components/ui";
+import { help } from "@/content/help";
 import type { Prisma } from "@/generated/prisma/client";
 import { channelLabel } from "@/lib/channels";
 import { db } from "@/lib/db";
@@ -101,7 +102,7 @@ async function Conversations({ searchParams }: { searchParams: SearchParams }) {
 export default function InboxPage({ searchParams }: { searchParams: SearchParams }) {
   return (
     <>
-      <PageTitle title="Inbox" />
+      <PageTitle title="Inbox" help={help.inbox} />
       <Suspense fallback={<Loading />}>
         <Conversations searchParams={searchParams} />
       </Suspense>

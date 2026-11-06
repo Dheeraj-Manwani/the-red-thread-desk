@@ -3,7 +3,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { markOrderPaid, renewPaymentLink, sendOrderMessage, updateOrder } from "@/app/actions";
+import { InfoButton } from "@/components/info-button";
 import { Badge, buttonClass, Card, Field, inputClass, Loading, secondaryButtonClass } from "@/components/ui";
+import { help } from "@/content/help";
 import { channelLabel } from "@/lib/channels";
 import { db } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
@@ -47,6 +49,7 @@ async function OrderDetail({ params, searchParams }: { params: Promise<{ id: str
             ← Orders
           </Link>
           <h1 className="text-lg font-semibold">{orderLabel(order)}</h1>
+          <InfoButton help={help.order} />
           <Badge tone={paid ? "green" : order.paymentStatus === "UNPAID" ? "grey" : "red"}>
             {order.paymentStatus.toLowerCase()}
           </Badge>

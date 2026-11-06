@@ -90,6 +90,15 @@ Known problems and risks, including code races to fix: [known-issues.md](known-i
 - [ ] AI intent: set `ANTHROPIC_API_KEY`; Hinglish samples ("kitne ka hai", "designs dikhao", "mera invite kab milega", "kisi se baat karni hai") land on the right intent; cost logs in Settings; the cap stops calls.
 - [ ] Dashboard today/7-day numbers, handoffs, closing windows, top posts, spend; Stats funnel and revenue by channel.
 
+## Phase 8: Info buttons
+
+- [ ] Every admin page shows an "i" next to its title (`pnpm check:help` passes; it also runs with `pnpm typecheck`).
+- [ ] The "i" pulses until opened once on that browser; after that it stays still (also after a reload).
+- [ ] The modal opens and closes with click, Esc and the backdrop; it scrolls on a phone and in the installed PWA.
+- [ ] "Related screens" and "Start here" links in the modal navigate and close it.
+- [ ] `/start` lists the daily and weekly routine, the setup order, every screen, and the glossary.
+- [ ] Read each screen's help once and correct anything that doesn't match how you actually work.
+
 ## Before production (not code)
 
 - [ ] Meta **App Review** + Advanced Access for comment and messaging permissions, and **business verification**. Needed for webhooks from people without an app role. [Certain, Meta docs]

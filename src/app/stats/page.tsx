@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { connection } from "next/server";
 import { Badge, Card, Loading, PageTitle } from "@/components/ui";
+import { help } from "@/content/help";
 import type { Channel } from "@/generated/prisma/client";
 import { channelLabel } from "@/lib/channels";
 import { db } from "@/lib/db";
@@ -273,7 +274,7 @@ async function Stats({ searchParams }: { searchParams: SearchParams }) {
 export default function StatsPage({ searchParams }: { searchParams: SearchParams }) {
   return (
     <>
-      <PageTitle title="Per-post stats" />
+      <PageTitle title="Per-post stats" help={help.stats} />
       <Suspense fallback={<Loading />}>
         <Stats searchParams={searchParams} />
       </Suspense>

@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import { deletePackage, savePackage } from "@/app/actions";
 import { Badge, buttonClass, Card, Field, inputClass, Loading, PageTitle, secondaryButtonClass } from "@/components/ui";
+import { help } from "@/content/help";
 import type { Package } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { QUICK_REPLY_LIMIT } from "@/lib/flows/graph";
@@ -72,7 +73,7 @@ async function PackageList() {
 export default function PackagesPage() {
   return (
     <>
-      <PageTitle title="Packages" />
+      <PageTitle title="Packages" help={help.packages} />
       <Suspense fallback={<Loading />}>
         <PackageList />
       </Suspense>

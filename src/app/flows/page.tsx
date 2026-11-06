@@ -3,6 +3,7 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { createFlow, deleteFlow } from "@/app/actions";
 import { buttonClass, Card, inputClass, Loading, PageTitle, secondaryButtonClass } from "@/components/ui";
+import { help } from "@/content/help";
 import { db } from "@/lib/db";
 import { parseGraph } from "@/lib/flows/graph";
 import { formatDateTime } from "@/lib/format";
@@ -61,7 +62,7 @@ async function FlowList() {
 export default function FlowsPage() {
   return (
     <>
-      <PageTitle title="Flows" />
+      <PageTitle title="Flows" help={help.flows} />
       <Suspense fallback={<Loading />}>
         <FlowList />
       </Suspense>

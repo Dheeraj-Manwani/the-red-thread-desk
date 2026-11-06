@@ -11,6 +11,9 @@ Comment-to-DM automation for Red Thread on Instagram and Facebook.
 - **Phase 6:** WhatsApp Cloud API (Coexistence) in the inbox and flows, DM keyword automations on every channel,
   templates and broadcasts with a cost preview, AI intent for Hinglish with a monthly cap, full dashboard and funnel.
 
+Next up: phases 7–13 (go live, info buttons, content attribution, YouTube Shorts, follow-ups, fulfilment, after-sale)
+in [docs/roadmap.md](docs/roadmap.md).
+
 > **None of this has been verified against Meta yet.** See [docs/verification.md](docs/verification.md) for the test
 > checklist and [docs/known-issues.md](docs/known-issues.md) for known problems and risks.
 

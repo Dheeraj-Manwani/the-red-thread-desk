@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { connection } from "next/server";
 import { Loading, PageTitle } from "@/components/ui";
+import { help } from "@/content/help";
 import { TriggerForm } from "@/app/triggers/trigger-form";
 import { triggerTypes, type TriggerTypeKey as TypeKey } from "@/app/triggers/trigger-types";
 
@@ -33,7 +34,7 @@ async function NewTrigger({ searchParams }: { searchParams: Promise<{ type?: str
 export default function NewTriggerPage({ searchParams }: { searchParams: Promise<{ type?: string }> }) {
   return (
     <>
-      <PageTitle title="New automation" />
+      <PageTitle title="New automation" help={help.automationNew} />
       <Suspense fallback={<Loading />}>
         <NewTrigger searchParams={searchParams} />
       </Suspense>

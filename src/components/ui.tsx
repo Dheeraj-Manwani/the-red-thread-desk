@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { InfoButton } from "@/components/info-button";
+import type { ScreenHelp } from "@/content/help/types";
 
 export const inputClass =
   "w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-red-600 focus:ring-2 focus:ring-red-100";
@@ -11,10 +13,14 @@ export function Card({ children, className = "" }: { children: ReactNode; classN
   return <div className={`rounded-lg border border-neutral-200 bg-white p-5 ${className}`}>{children}</div>;
 }
 
-export function PageTitle({ title, children }: { title: string; children?: ReactNode }) {
+/** Every admin screen's title. `help` is required: a screen isn't finished without its "i" help. */
+export function PageTitle({ title, help, children }: { title: string; help: ScreenHelp; children?: ReactNode }) {
   return (
     <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-      <h1 className="text-xl font-semibold">{title}</h1>
+      <div className="flex items-center gap-2">
+        <h1 className="text-xl font-semibold">{title}</h1>
+        <InfoButton help={help} />
+      </div>
       {children}
     </div>
   );

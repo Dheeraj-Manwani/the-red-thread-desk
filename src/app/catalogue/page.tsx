@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import { syncCatalogueNow, toggleCarousel } from "@/app/actions";
 import { Badge, buttonClass, Card, Loading, PageTitle, secondaryButtonClass } from "@/components/ui";
+import { help } from "@/content/help";
 import { db } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
 
@@ -83,7 +84,7 @@ async function Catalogue({ searchParams }: { searchParams: SearchParams }) {
 export default function CataloguePage({ searchParams }: { searchParams: SearchParams }) {
   return (
     <>
-      <PageTitle title="Catalogue" />
+      <PageTitle title="Catalogue" help={help.catalogue} />
       <Suspense fallback={<Loading />}>
         <Catalogue searchParams={searchParams} />
       </Suspense>

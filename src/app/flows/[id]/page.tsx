@@ -3,7 +3,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { FlowBuilder } from "@/app/flows/[id]/flow-builder";
+import { InfoButton } from "@/components/info-button";
 import { Loading } from "@/components/ui";
+import { help } from "@/content/help";
 import { db } from "@/lib/db";
 import { parseGraph } from "@/lib/flows/graph";
 
@@ -35,11 +37,12 @@ export default function FlowPage({ params }: { params: Promise<{ id: string }> }
   return (
     // Full width: the canvas needs more room than the 5xl column.
     <div className="relative left-1/2 w-[calc(100vw-2rem)] max-w-[1600px] -translate-x-1/2">
-      <p className="mb-3 text-sm">
+      <div className="mb-3 flex items-center gap-3 text-sm">
         <Link href="/flows" className="text-neutral-600 hover:underline">
           ← Flows
         </Link>
-      </p>
+        <InfoButton help={help.flowBuilder} />
+      </div>
       <Suspense fallback={<Loading />}>
         <Builder params={params} />
       </Suspense>

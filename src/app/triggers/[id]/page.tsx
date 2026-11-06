@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Badge, Loading, PageTitle } from "@/components/ui";
+import { help } from "@/content/help";
 import { TriggerForm } from "@/app/triggers/trigger-form";
 import { triggerTypeLabel } from "@/app/triggers/trigger-types";
 import { db } from "@/lib/db";
@@ -24,7 +25,7 @@ async function EditTrigger({ params }: { params: Promise<{ id: string }> }) {
 export default function EditTriggerPage({ params }: { params: Promise<{ id: string }> }) {
   return (
     <>
-      <PageTitle title="Edit automation" />
+      <PageTitle title="Edit automation" help={help.automationEdit} />
       <Suspense fallback={<Loading />}>
         <EditTrigger params={params} />
       </Suspense>

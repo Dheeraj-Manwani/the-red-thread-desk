@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import { reloadToken, subscribeWebhooks } from "@/app/actions";
 import { Card, Loading, PageTitle, secondaryButtonClass } from "@/components/ui";
+import { help } from "@/content/help";
 import type { Channel } from "@/generated/prisma/client";
 import { getAccount } from "@/lib/account";
 import { channelLabel } from "@/lib/channels";
@@ -187,7 +188,7 @@ async function Accounts({ searchParams }: { searchParams: SearchParams }) {
 export default function SettingsPage({ searchParams }: { searchParams: SearchParams }) {
   return (
     <>
-      <PageTitle title="Settings" />
+      <PageTitle title="Settings" help={help.settings} />
       <Suspense fallback={<Loading />}>
         <Accounts searchParams={searchParams} />
       </Suspense>
